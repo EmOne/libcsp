@@ -286,7 +286,7 @@ int main(int argc, char * argv[]) {
 			clock_gettime(CLOCK_MONOTONIC, &current_time);
 
 			/* We don't really care about the precision of it. */
-			if (current_time.tv_sec - start_time.tv_sec > run_duration_in_sec) {
+			if (current_time.tv_sec - start_time.tv_sec > (long int) run_duration_in_sec) {
 				/* Test mode, check that server & client can exchange packets */
 				if (successful_ping < 5) {
 					csp_print("Client successfully pinged the server %u times\n", successful_ping);
