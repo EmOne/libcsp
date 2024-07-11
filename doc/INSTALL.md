@@ -59,21 +59,24 @@ use:
 
 ## Using CMake
 
-In order to compile CSP with `cmake`, you run the following commands:
+Make sure [Ninja](https://ninja-build.org/) is installed on your system first.
+You can now run the following commands to compile CSP with `cmake`:
 
 ```shell
-cmake -GNinja -B builddir
-cd builddir
-ninja
+cmake -G Ninja -B builddir
+cmake --build builddir
 ```
 
+Please note that other build system generators might work as well, but `Ninja` is the officially
+supported and tested build system when using CMake.
 To install the compiled libcsp.so and header files to the install directory,
 you run the following command:
 
 ```shell
-ninja install
+cmake --install builddir
 ```
 
+Please note that `sudo` might be required to install files into the default install directories.
 By default, it will be installed in `/usr/local/lib` and `/usr/local/include`,
 but if you wish to change it, you can specify `-DCMAKE_INSTALL_PREFIX=<path>`
 during the build process, and it will be installed in `<path>/lib` and `<path>/include`.
@@ -119,7 +122,7 @@ meson setup builddir . -Denable_reproducible_builds=true
 ### CMake
 
 ```shell
-cmake -GNinja -B builddir -DCSP_REPRODUCIBLE_BUILDS=ON
+cmake -G Ninja -B builddir -DCSP_REPRODUCIBLE_BUILDS=ON
 ```
 
 Note: By default, CMake embeds the build directory in the binaries,
@@ -127,7 +130,7 @@ resulting in non-deterministic builds. To address this, use
 `CMAKE_BUILD_RPATH_USE_ORIGIN=ON` or `CMAKE_SKIP_RPATH=ON` as follows:
 
 ```shell
-cmake -GNinja -B builddir -DCSP_REPRODUCIBLE_BUILDS=ON -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
+cmake -G Ninja -B builddir -DCSP_REPRODUCIBLE_BUILDS=ON -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
 ```
 
 See [Reproducible Builds site][1] or [CMake document][2] for more details.
