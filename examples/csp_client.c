@@ -10,6 +10,13 @@
 #include <csp/drivers/can_socketcan.h>
 #include <csp/interfaces/csp_if_zmqhub.h>
 
+#include <stdio.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+
+#include <linux/can.h>
+#include <linux/can/raw.h>
 
 /* This function must be provided in arch specific way */
 int router_start(void);
@@ -140,6 +147,14 @@ int main(int argc, char * argv[]) {
 	int ret = EXIT_SUCCESS;
     int opt;
 
+	int s, i; 
+	int nbytes;
+	struct sockaddr_can addr;
+	struct ifreq ifr;
+	struct can_frame frame;
+	char frame_buff[32];
+	size_t alen;
+
 	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_R "k:a:C:tT:h", long_options, NULL)) != -1) {
         switch (opt) {
             case 'c':
@@ -188,6 +203,25 @@ int main(int argc, char * argv[]) {
         print_help();
         exit(EXIT_FAILURE);
     }
+
+	csp_print("CAN Sockets Receive \n");
+
+	if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
+		perror("CAN Socket");
+		exit(EXIT_FAILURE);
+	}
+
+	strcpy(ifr.ifr_name, "can0" );
+	ioctl(s, SIOCGIFINDEX, &ifr);
+
+	memset(&addr, 0, sizeof(addr));
+	addr.can_family = AF_CAN;
+	addr.can_ifindex = ifr.ifr_ifindex;
+
+	if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+		perror("CAN Bind");
+		exit(EXIT_FAILURE);
+	}
 
     csp_print("Initialising CSP\n");
 
@@ -257,6 +291,25 @@ int main(int argc, char * argv[]) {
 			break;
 		}
 
+
+		nbytes = read(s, &frame, sizeof(struct can_frame));
+
+		if (nbytes < 0) {
+			perror("CAN Read");
+			break;
+		}
+		
+		csp_print("0x%03X [%d] ",frame.can_id  & 0xfff, frame.can_dlc);	
+		alen = sprintf(frame_buff, "%03X#", frame.can_id & 0xfff);	
+				
+		for (i = 0; i < frame.can_dlc; i++) 
+		{
+			csp_print("%02X ",frame.data[i]);
+			alen += sprintf(frame_buff + alen, "%02X", frame.data[i]);
+		}
+		
+		csp_print("\n");
+
 		/* 2. Get packet buffer for message/data */
 		csp_packet_t * packet = csp_buffer_get(100);
 		if (packet == NULL) {
@@ -267,9 +320,13 @@ int main(int argc, char * argv[]) {
 		}
 
 		/* 3. Copy data to packet */
-		memcpy(packet->data, "Hello world ", 12);
-		memcpy(packet->data + 12, &count, 1);
-		memset(packet->data + 13, 0, 1);
+		
+		// memcpy(packet->data, "EmOne->word: ", 12);
+		// memcpy(packet->data + 12, &count, 1);
+		// memset(packet->data + 13, 0, 1);
+		memcpy(packet->data, &frame_buff, alen);
+		memset(packet->data + alen, 0, 1);
+		csp_print("Sending MSG: %s\n", packet->data);
 		count++;
 
 		/* 4. Set packet length */

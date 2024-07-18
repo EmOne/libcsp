@@ -11,8 +11,8 @@ int csp_id_setup_rx(csp_packet_t * packet);
 extern csp_conf_t csp_conf;
 
 int debug = 0;
-const char * sub_str = "tcp://0.0.0.0:6000";
-const char * pub_str = "tcp://0.0.0.0:7000";
+const char * sub_str = "tcp://0.0.0.0:26003";
+const char * pub_str = "tcp://0.0.0.0:26004";
 char * logfile_name = NULL;
 FILE * logfile;
 

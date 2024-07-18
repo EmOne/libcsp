@@ -64,9 +64,9 @@ loopback interface for communication between client and server:
 To run the example with ZMQHUB interfaces, start the `zmqproxy`, client and server in three separate processes.
 
     libcsp$ ./build/examples/zmqproxy
-    Subscriber task listening on tcp://0.0.0.0:6000
-    Publisher task listening on tcp://0.0.0.0:7000
-    Capture/logging task listening on tcp://0.0.0.0:6000
+    Subscriber task listening on tcp://0.0.0.0:26003
+    Publisher task listening on tcp://0.0.0.0:26004
+    Capture/logging task listening on tcp://0.0.0.0:26003
     Packet: Src 3, Dst 2, Dport 1, Sport 18, Pri 2, Flags 0x00, Size 100
     Packet: Src 2, Dst 3, Dport 18, Sport 1, Pri 2, Flags 0x00, Size 100
     Packet: Src 3, Dst 2, Dport 4, Sport 19, Pri 2, Flags 0x01, Size 8

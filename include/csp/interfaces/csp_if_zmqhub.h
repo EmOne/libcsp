@@ -24,13 +24,13 @@ extern "C" {
  * zmqproxy default subscribe (rx) port.
  * The client must connect it's publish endpoint to the zmqproxy's subscribe port.
  */
-#define CSP_ZMQPROXY_SUBSCRIBE_PORT   6000
+#define CSP_ZMQPROXY_SUBSCRIBE_PORT   26003
 
 /**
  * zmqproxy default publish (tx) port.
  * The client must connect it's subscribe endpoint to the zmqproxy's publish port.
  */
-#define CSP_ZMQPROXY_PUBLISH_PORT     7000
+#define CSP_ZMQPROXY_PUBLISH_PORT     26004
 
 /**
  * Default ZMQ interface name.
