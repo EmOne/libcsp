@@ -9,10 +9,31 @@
 #include <csp/drivers/can_socketcan.h>
 #include <csp/interfaces/csp_if_zmqhub.h>
 
+#include <stdio.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+
+#include <linux/can.h>
+#include <linux/can/raw.h>
+
+/* the 8-bit VCID is optionally placed in the canxl_frame.prio element */
+#define CANXL_VCID_OFFSET 16 /* bit offset of VCID in prio element */
+#define CANXL_VCID_VAL_MASK 0xFFUL /* VCID is an 8-bit value */
+#define CANXL_VCID_MASK (CANXL_VCID_VAL_MASK << CANXL_VCID_OFFSET)
+
+/* CAN CC/FD/XL frame union */
+typedef union {
+	struct can_frame cc;
+	struct canfd_frame fd;
+	struct canxl_frame xl;
+} cu_t;
 
 /* These three functions must be provided in arch specific way */
 int router_start(void);
 int server_start(void);
+
+int parse_canframe(char *cs, cu_t *cu);
 
 /* Server port, the port the server listens on for incoming connections from the client. */
 #define SERVER_PORT		10
@@ -25,6 +46,8 @@ static bool test_mode = false;
 static unsigned int server_received = 0;
 static unsigned int run_duration_in_sec = 3;
 
+static uint32_t can_bps = 1000000;
+
 enum DeviceType {
 	DEVICE_UNKNOWN,
 	DEVICE_CAN,
@@ -34,11 +57,220 @@ enum DeviceType {
 
 #define __maybe_unused __attribute__((__unused__))
 
+
+#define CANID_DELIM '#'
+#define CC_DLC_DELIM '_'
+#define XL_HDR_DELIM ':'
+#define DATA_SEPERATOR '.'
+
+const char hex_asc_upper[] = "0123456789ABCDEF";
+
+#define hex_asc_upper_lo(x) hex_asc_upper[((x)&0x0F)]
+#define hex_asc_upper_hi(x) hex_asc_upper[((x)&0xF0) >> 4]
+
+
+unsigned char asc2nibble(char c)
+{
+	if ((c >= '0') && (c <= '9'))
+		return c - '0';
+
+	if ((c >= 'A') && (c <= 'F'))
+		return c - 'A' + 10;
+
+	if ((c >= 'a') && (c <= 'f'))
+		return c - 'a' + 10;
+
+	return 16; /* error */
+}
+
+
+int parse_canframe(char *cs, cu_t *cu)
+{
+	/* documentation see lib.h */
+
+	int i, idx, dlen, len;
+	int maxdlen = CAN_MAX_DLEN;
+	int mtu = CAN_MTU;
+	__u8 *data = cu->fd.data; /* fill CAN CC/FD data by default */
+	canid_t tmp;
+
+	len = strlen(cs);
+	//printf("'%s' len %d\n", cs, len);
+
+	memset(cu, 0, sizeof(*cu)); /* init CAN CC/FD/XL frame, e.g. LEN = 0 */
+
+	if (len < 4)
+		return 0;
+
+	if (cs[3] == CANID_DELIM) { /* 3 digits SFF */
+
+		idx = 4;
+		for (i = 0; i < 3; i++) {
+			if ((tmp = asc2nibble(cs[i])) > 0x0F)
+				return 0;
+			cu->cc.can_id |= tmp << (2 - i) * 4;
+		}
+
+	} else if (cs[5] == CANID_DELIM) { /* 5 digits CAN XL VCID/PRIO*/
+
+		idx = 6;
+		for (i = 0; i < 5; i++) {
+			if ((tmp = asc2nibble(cs[i])) > 0x0F)
+				return 0;
+			cu->xl.prio |= tmp << (4 - i) * 4;
+		}
+
+		/* the VCID starts at bit position 16 */
+		tmp = (cu->xl.prio << 4) & CANXL_VCID_MASK;
+		cu->xl.prio &= CANXL_PRIO_MASK;
+		cu->xl.prio |= tmp;
+
+	} else if (cs[8] == CANID_DELIM) { /* 8 digits EFF */
+
+		idx = 9;
+		for (i = 0; i < 8; i++) {
+			if ((tmp = asc2nibble(cs[i])) > 0x0F)
+				return 0;
+			cu->cc.can_id |= tmp << (7 - i) * 4;
+		}
+		if (!(cu->cc.can_id & CAN_ERR_FLAG)) /* 8 digits but no errorframe?  */
+			cu->cc.can_id |= CAN_EFF_FLAG;   /* then it is an extended frame */
+
+	} else
+		return 0;
+
+	if ((cs[idx] == 'R') || (cs[idx] == 'r')) { /* RTR frame */
+		cu->cc.can_id |= CAN_RTR_FLAG;
+
+		/* check for optional DLC value for CAN 2.0B frames */
+		if (cs[++idx] && (tmp = asc2nibble(cs[idx++])) <= CAN_MAX_DLEN) {
+			cu->cc.len = tmp;
+
+			/* check for optional raw DLC value for CAN 2.0B frames */
+			if ((tmp == CAN_MAX_DLEN) && (cs[idx++] == CC_DLC_DELIM)) {
+				tmp = asc2nibble(cs[idx]);
+				if ((tmp > CAN_MAX_DLEN) && (tmp <= CAN_MAX_RAW_DLC))
+					cu->cc.len8_dlc = tmp;
+			}
+		}
+		return mtu;
+	}
+
+	if (cs[idx] == CANID_DELIM) { /* CAN FD frame escape char '##' */
+		maxdlen = CANFD_MAX_DLEN;
+		mtu = CANFD_MTU;
+
+		/* CAN FD frame <canid>##<flags><data>* */
+		if ((tmp = asc2nibble(cs[idx + 1])) > 0x0F)
+			return 0;
+
+		cu->fd.flags = tmp;
+		cu->fd.flags |= CANFD_FDF; /* dual-use */
+		idx += 2;
+
+	} else if (cs[idx + 14] == CANID_DELIM) { /* CAN XL frame '#80:00:11223344#' */
+		maxdlen = CANXL_MAX_DLEN;
+		mtu = CANXL_MTU;
+		data = cu->xl.data; /* fill CAN XL data */
+
+		if ((cs[idx + 2] != XL_HDR_DELIM) || (cs[idx + 5] != XL_HDR_DELIM))
+			return 0;
+
+		if ((tmp = asc2nibble(cs[idx++])) > 0x0F)
+			return 0;
+		cu->xl.flags = tmp << 4;
+		if ((tmp = asc2nibble(cs[idx++])) > 0x0F)
+			return 0;
+		cu->xl.flags |= tmp;
+
+		/* force CAN XL flag if it was missing in the ASCII string */
+		cu->xl.flags |= CANXL_XLF;
+
+		idx++; /* skip XL_HDR_DELIM */
+
+		if ((tmp = asc2nibble(cs[idx++])) > 0x0F)
+			return 0;
+		cu->xl.sdt = tmp << 4;
+		if ((tmp = asc2nibble(cs[idx++])) > 0x0F)
+			return 0;
+		cu->xl.sdt |= tmp;
+
+		idx++; /* skip XL_HDR_DELIM */
+
+		for (i = 0; i < 8; i++) {
+			if ((tmp = asc2nibble(cs[idx++])) > 0x0F)
+				return 0;
+			cu->xl.af |= tmp << (7 - i) * 4;
+		}
+
+		idx++; /* skip CANID_DELIM */
+	}
+
+	for (i = 0, dlen = 0; i < maxdlen; i++) {
+		if (cs[idx] == DATA_SEPERATOR) /* skip (optional) separator */
+			idx++;
+
+		if (idx >= len) /* end of string => end of data */
+			break;
+
+		if ((tmp = asc2nibble(cs[idx++])) > 0x0F)
+			return 0;
+		data[i] = tmp << 4;
+		if ((tmp = asc2nibble(cs[idx++])) > 0x0F)
+			return 0;
+		data[i] |= tmp;
+		dlen++;
+	}
+
+	if (mtu == CANXL_MTU)
+		cu->xl.len = dlen;
+	else
+		cu->fd.len = dlen;
+
+	/* check for extra DLC when having a Classic CAN with 8 bytes payload */
+	if ((maxdlen == CAN_MAX_DLEN) && (dlen == CAN_MAX_DLEN) && (cs[idx++] == CC_DLC_DELIM)) {
+		unsigned char dlc = asc2nibble(cs[idx]);
+
+		if ((dlc > CAN_MAX_DLEN) && (dlc <= CAN_MAX_RAW_DLC))
+			cu->cc.len8_dlc = dlc;
+	}
+
+	return mtu;
+}
+
 /* Server task - handles requests from clients */
 void server(void) {
+	
+	int s; /* can raw socket */
+	int required_mtu;
+	// int mtu;
+	// int enable_canfx = 1;
+	struct sockaddr_can addr;
+	// struct can_raw_vcid_options vcid_opts = {
+	// 	.flags = CAN_RAW_XL_VCID_TX_PASS,
+	// };
+	static cu_t cu;
+	struct ifreq ifr;
 
+	if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
+		perror("CAN Socket");
+		exit(EXIT_FAILURE);
+	}
+
+	strcpy(ifr.ifr_name, "can0" );
+	ioctl(s, SIOCGIFINDEX, &ifr);
+
+	memset(&addr, 0, sizeof(addr));
+	addr.can_family = AF_CAN;
+	addr.can_ifindex = ifr.ifr_ifindex;
+
+	if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+		perror("CAN Bind");
+		exit(EXIT_FAILURE);
+	}
+	
 	csp_print("Server task started\n");
-
+	
 	/* Create socket with no specific socket options, e.g. accepts CRC32, HMAC, etc. if enabled during compilation */
 	csp_socket_t sock = {0};
 
@@ -65,8 +297,25 @@ void server(void) {
 			case SERVER_PORT:
 				/* Process packet here */
 				csp_print("Packet received on SERVER_PORT: %s\n", (char *) packet->data);
+
+				/* parse CAN frame */
+				required_mtu = parse_canframe((char *) packet->data, &cu);
+				if (!required_mtu) {
+					fprintf(stderr, "\nWrong CAN-frame format!\n\n");
+					// print_usage(argv[0]);
+					// return 1;
+					break;
+				}
+				
 				csp_buffer_free(packet);
 				++server_received;
+
+				/* send frame */
+				if (write(s, &cu, required_mtu) != required_mtu) {
+					perror("write");
+					// return 1;
+				}
+
 				break;
 
 			default:
@@ -87,10 +336,12 @@ void server(void) {
 static struct option long_options[] = {
     {"kiss-device", required_argument, 0, 'k'},
 #if (CSP_HAVE_LIBSOCKETCAN)
-	#define OPTION_c "c:"
+	#define OPTION_c "cb:"
     {"can-device", required_argument, 0, 'c'},
+	{"can-bps", required_argument, 0, 'b'},
 #else
 	#define OPTION_c
+	#define OPTION_b
 #endif
 #if (CSP_HAVE_LIBZMQ)
 	#define OPTION_z "z:"
@@ -116,6 +367,7 @@ void print_help() {
     csp_print("Usage: csp_server [options]\n");
 	if (CSP_HAVE_LIBSOCKETCAN) {
 		csp_print(" -c <can-device>  set CAN device\n");
+		csp_print(" -b <can-bitrate>  set CAN device bitrate\n");
 	}
 	if (1) {
 		csp_print(" -k <kiss-device> set KISS device\n");
@@ -156,7 +408,7 @@ csp_iface_t * add_interface(enum DeviceType device_type, const char * device_nam
     }
 
     if (CSP_HAVE_LIBSOCKETCAN && (device_type == DEVICE_CAN)) {
-        int error = csp_can_socketcan_open_and_add_interface(device_name, CSP_IF_CAN_DEFAULT_NAME, server_address, 1000000, true, &default_iface);
+        int error = csp_can_socketcan_open_and_add_interface(device_name, CSP_IF_CAN_DEFAULT_NAME, server_address, can_bps, true, &default_iface);
         if (error != CSP_ERR_NONE) {
             csp_print("failed to add CAN interface [%s], error: %d\n", device_name, error);
             exit(1);
@@ -190,6 +442,9 @@ int main(int argc, char * argv[]) {
             case 'c':
 				device_name = optarg;
 				device_type = DEVICE_CAN;
+                break;
+            case 'b':
+				can_bps = atoi(optarg);
                 break;
             case 'k':
 				device_name = optarg;

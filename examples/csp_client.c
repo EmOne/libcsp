@@ -33,6 +33,8 @@ static bool test_mode = false;
 static unsigned int successful_ping = 0;
 static unsigned int run_duration_in_sec = 3;
 
+static uint32_t can_bps = 1000000;
+
 enum DeviceType {
 	DEVICE_UNKNOWN,
 	DEVICE_CAN,
@@ -45,8 +47,9 @@ enum DeviceType {
 static struct option long_options[] = {
 	{"kiss-device", required_argument, 0, 'k'},
 #if (CSP_HAVE_LIBSOCKETCAN)
-	#define OPTION_c "c:"
+	#define OPTION_c "cb:"
     {"can-device", required_argument, 0, 'c'},
+	{"can-bps", required_argument, 0, 'b'},
 #else
 	#define OPTION_c
 #endif
@@ -74,6 +77,7 @@ void print_help() {
 	csp_print("Usage: csp_client [options]\n");
 	if (CSP_HAVE_LIBSOCKETCAN) {
 		csp_print(" -c <can-device>  set CAN device\n");
+		csp_print(" -b <can-device-bitrate>  set CAN device bitrate\n");
 	}
 	if (1) {
 		csp_print(" -k <kiss-device> set KISS device\n");
@@ -115,7 +119,7 @@ csp_iface_t * add_interface(enum DeviceType device_type, const char * device_nam
     }
 
 	if (CSP_HAVE_LIBSOCKETCAN && (device_type == DEVICE_CAN)) {
-		int error = csp_can_socketcan_open_and_add_interface(device_name, CSP_IF_CAN_DEFAULT_NAME, client_address, 1000000, true, &default_iface);
+		int error = csp_can_socketcan_open_and_add_interface(device_name, CSP_IF_CAN_DEFAULT_NAME, client_address, can_bps, true, &default_iface);
         if (error != CSP_ERR_NONE) {
 			csp_print("failed to add CAN interface [%s], error: %d\n", device_name, error);
             exit(1);
@@ -160,6 +164,9 @@ int main(int argc, char * argv[]) {
             case 'c':
 				device_name = optarg;
 				device_type = DEVICE_CAN;
+                break;
+            case 'b':
+				can_bps = atoi(optarg);
                 break;
             case 'k':
 				device_name = optarg;
