@@ -361,7 +361,7 @@ static struct option long_options[] = {
 	#define OPTION_z "z:"
     {"zmq-device", required_argument, 0, 'z'},
 	#define OPTION_f "f:"
-	{"zmq2can", no_argument, 0, 'f'},
+	{"zmq2can", required_argument, 0, 'f'},
 #else
 	#define OPTION_z
 	#define OPTION_f
@@ -391,7 +391,7 @@ void print_help() {
 	}
 	if (CSP_HAVE_LIBZMQ) {
 		csp_print(" -z <zmq-device>  set ZeroMQ device\n");
-		csp_print(" -f               forward ZeroMQ to CAN raw\n");
+		csp_print(" -f <0|1>         forward ZeroMQ to CAN raw\n");
 	}
 	if (CSP_USE_RTABLE) {
 		csp_print(" -R <rtable>      set routing table\n");
@@ -455,7 +455,7 @@ int main(int argc, char * argv[]) {
 	csp_iface_t * default_iface;
     int opt;
 
-	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:a:tT:h", long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:a:tT:h:" , long_options, NULL)) != -1) {
         switch (opt) {
             case 'c':
 				device_name = optarg;
@@ -473,7 +473,7 @@ int main(int argc, char * argv[]) {
 				device_type = DEVICE_ZMQ;
                 break;
 			case 'f':
-				forwarding = true;
+				forwarding = atoi(optarg);
                 break;
 #if (CSP_USE_RTABLE)
             case 'R':
