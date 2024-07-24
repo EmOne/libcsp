@@ -34,6 +34,7 @@ static unsigned int successful_ping = 0;
 static unsigned int run_duration_in_sec = 3;
 
 static uint32_t can_bps = 1000000;
+static bool forwarding = false;
 
 enum DeviceType {
 	DEVICE_UNKNOWN,
@@ -56,6 +57,8 @@ static struct option long_options[] = {
 #if (CSP_HAVE_LIBZMQ)
 	#define OPTION_z "z:"
     {"zmq-device", required_argument, 0, 'z'},
+	#define OPTION_f "f:"
+    {"can2zmq", required_argument, 0, 'f'},
 #else
 	#define OPTION_z
 #endif
@@ -84,6 +87,7 @@ void print_help() {
 	}
 	if (CSP_HAVE_LIBZMQ) {
 		csp_print(" -z <zmq-device>  set ZeroMQ device\n");
+		csp_print(" -f <0|1>         forward CAN to ZMQ\n");
 	}
 	if (CSP_USE_RTABLE) {
 		csp_print(" -R <rtable>      set routing table\n");
@@ -151,7 +155,7 @@ int main(int argc, char * argv[]) {
 	int ret = EXIT_SUCCESS;
     int opt;
 
-	int s, i; 
+	int s = 0, i; 
 	int nbytes;
 	struct sockaddr_can addr;
 	struct ifreq ifr;
@@ -159,7 +163,7 @@ int main(int argc, char * argv[]) {
 	char frame_buff[32];
 	size_t alen;
 
-	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_R "k:a:C:tT:h", long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:a:C:tT:h", long_options, NULL)) != -1) {
         switch (opt) {
             case 'c':
 				device_name = optarg;
@@ -175,6 +179,9 @@ int main(int argc, char * argv[]) {
             case 'z':
 				device_name = optarg;
 				device_type = DEVICE_ZMQ;
+                break;
+            case 'f':
+				forwarding = atoi(optarg);
                 break;
 #if (CSP_USE_RTABLE)
             case 'R':
@@ -212,22 +219,24 @@ int main(int argc, char * argv[]) {
     }
 
 	csp_print("CAN Sockets Receive \n");
+	
+	if(forwarding) {
+		if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
+			perror("CAN Socket");
+			exit(EXIT_FAILURE);
+		}
+	
+		strcpy(ifr.ifr_name, "can0" );
+		ioctl(s, SIOCGIFINDEX, &ifr);
 
-	if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
-		perror("CAN Socket");
-		exit(EXIT_FAILURE);
-	}
+		memset(&addr, 0, sizeof(addr));
+		addr.can_family = AF_CAN;
+		addr.can_ifindex = ifr.ifr_ifindex;
 
-	strcpy(ifr.ifr_name, "can0" );
-	ioctl(s, SIOCGIFINDEX, &ifr);
-
-	memset(&addr, 0, sizeof(addr));
-	addr.can_family = AF_CAN;
-	addr.can_ifindex = ifr.ifr_ifindex;
-
-	if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		perror("CAN Bind");
-		exit(EXIT_FAILURE);
+		if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+			perror("CAN Bind");
+			exit(EXIT_FAILURE);
+		}
 	}
 
     csp_print("Initialising CSP\n");
@@ -298,23 +307,28 @@ int main(int argc, char * argv[]) {
 			break;
 		}
 
+		if(forwarding) {
+			nbytes = read(s, &frame, sizeof(struct can_frame));
 
-		nbytes = read(s, &frame, sizeof(struct can_frame));
+			if (nbytes < 0) {
+				perror("CAN Read");
+				break;
+			}
+			
+			csp_print("0x%03X [%d] ",frame.can_id  & 0xfff, frame.can_dlc);	
+			alen = sprintf(frame_buff, "%03X#", frame.can_id & 0xfff);	
+					
+			for (i = 0; i < frame.can_dlc; i++) 
+			{
+				csp_print("%02X ",frame.data[i]);
+				alen += sprintf(frame_buff + alen, "%02X", frame.data[i]);
+			}
+			
+		} else {
+			alen = sprintf(frame_buff, "%03X#", 0x201 & 0xfff);
+			alen += sprintf(frame_buff + alen, "%X", count);
+		}
 
-		if (nbytes < 0) {
-			perror("CAN Read");
-			break;
-		}
-		
-		csp_print("0x%03X [%d] ",frame.can_id  & 0xfff, frame.can_dlc);	
-		alen = sprintf(frame_buff, "%03X#", frame.can_id & 0xfff);	
-				
-		for (i = 0; i < frame.can_dlc; i++) 
-		{
-			csp_print("%02X ",frame.data[i]);
-			alen += sprintf(frame_buff + alen, "%02X", frame.data[i]);
-		}
-		
 		csp_print("\n");
 
 		/* 2. Get packet buffer for message/data */
