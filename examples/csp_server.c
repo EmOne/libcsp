@@ -17,6 +17,12 @@
 #include <linux/can.h>
 #include <linux/can/raw.h>
 
+/* valid bits in CAN ID for frame formats */
+#define CAN_SFF_MASK 0x000007FFU /* standard frame format (SFF) */
+#define CAN_EFF_MASK 0x1FFFFFFFU /* extended frame format (EFF) */
+#define CAN_ERR_MASK 0x1FFFFFFFU /* omit EFF, RTR, ERR flags */
+#define CANXL_PRIO_MASK CAN_SFF_MASK /* 11 bit priority mask */
+
 /* the 8-bit VCID is optionally placed in the canxl_frame.prio element */
 #define CANXL_VCID_OFFSET 16 /* bit offset of VCID in prio element */
 #define CANXL_VCID_VAL_MASK 0xFFUL /* VCID is an 8-bit value */
@@ -45,6 +51,8 @@ static uint8_t server_address = 0;
 static bool test_mode = false;
 static unsigned int server_received = 0;
 static unsigned int run_duration_in_sec = 3;
+
+static bool forwarding = false;
 
 static uint32_t can_bps = 1000000;
 
@@ -241,7 +249,7 @@ int parse_canframe(char *cs, cu_t *cu)
 /* Server task - handles requests from clients */
 void server(void) {
 	
-	int s; /* can raw socket */
+	int s = 0; /* can raw socket */
 	int required_mtu;
 	// int mtu;
 	// int enable_canfx = 1;
@@ -252,23 +260,25 @@ void server(void) {
 	static cu_t cu;
 	struct ifreq ifr;
 
-	if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
-		perror("CAN Socket");
-		exit(EXIT_FAILURE);
+	if(forwarding) {
+		if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
+			perror("CAN Socket");
+			exit(EXIT_FAILURE);
+		}
+
+		strcpy(ifr.ifr_name, "can0" );
+		ioctl(s, SIOCGIFINDEX, &ifr);
+
+		memset(&addr, 0, sizeof(addr));
+		addr.can_family = AF_CAN;
+		addr.can_ifindex = ifr.ifr_ifindex;
+
+		if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+			perror("CAN Bind");
+			exit(EXIT_FAILURE);
+		}
 	}
 
-	strcpy(ifr.ifr_name, "can0" );
-	ioctl(s, SIOCGIFINDEX, &ifr);
-
-	memset(&addr, 0, sizeof(addr));
-	addr.can_family = AF_CAN;
-	addr.can_ifindex = ifr.ifr_ifindex;
-
-	if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		perror("CAN Bind");
-		exit(EXIT_FAILURE);
-	}
-	
 	csp_print("Server task started\n");
 	
 	/* Create socket with no specific socket options, e.g. accepts CRC32, HMAC, etc. if enabled during compilation */
@@ -297,24 +307,26 @@ void server(void) {
 			case SERVER_PORT:
 				/* Process packet here */
 				csp_print("Packet received on SERVER_PORT: %s\n", (char *) packet->data);
-
-				/* parse CAN frame */
-				required_mtu = parse_canframe((char *) packet->data, &cu);
-				if (!required_mtu) {
-					fprintf(stderr, "\nWrong CAN-frame format!\n\n");
-					// print_usage(argv[0]);
-					// return 1;
-					break;
-				}
 				
-				csp_buffer_free(packet);
-				++server_received;
+				if(forwarding) {
+					/* parse CAN frame */
+					required_mtu = parse_canframe((char *) packet->data, &cu);
+					if (!required_mtu) {
+						fprintf(stderr, "\nWrong CAN-frame format!\n\n");
+						// print_usage(argv[0]);
+						// return 1;
+						break;
+					}
 
-				/* send frame */
-				if (write(s, &cu, required_mtu) != required_mtu) {
-					perror("write");
-					// return 1;
+					/* send frame */
+					if (write(s, &cu, required_mtu) != required_mtu) {
+						perror("write");
+						// return 1;
+					}
 				}
+
+				csp_buffer_free(packet);
+				++server_received;	
 
 				break;
 
@@ -344,8 +356,9 @@ static struct option long_options[] = {
 	#define OPTION_b
 #endif
 #if (CSP_HAVE_LIBZMQ)
-	#define OPTION_z "z:"
+	#define OPTION_z "zf:"
     {"zmq-device", required_argument, 0, 'z'},
+	{"zmq2can", no_argument, 0, 'f'},
 #else
 	#define OPTION_z
 #endif
@@ -374,6 +387,7 @@ void print_help() {
 	}
 	if (CSP_HAVE_LIBZMQ) {
 		csp_print(" -z <zmq-device>  set ZeroMQ device\n");
+		csp_print(" -f forward ZeroMQ to CAN\n");
 	}
 	if (CSP_USE_RTABLE) {
 		csp_print(" -R <rtable>      set routing table\n");
@@ -453,6 +467,9 @@ int main(int argc, char * argv[]) {
             case 'z':
 				device_name = optarg;
 				device_type = DEVICE_ZMQ;
+                break;
+			case 'f':
+				forwarding = true;
                 break;
 #if (CSP_USE_RTABLE)
             case 'R':
