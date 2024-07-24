@@ -113,8 +113,8 @@ int main(int argc, char ** argv) {
 					"Usage:\n"
 					" -d \t\tEnable debug\n"
 					" -v VERSION\tcsp version\n"
-					" -s SUB_STR\tsubscriber port: tcp://localhost:7000\n"
-					" -p PUB_STR\tpublisher  port: tcp://localhost:6000\n"
+					" -s SUB_STR\tsubscriber port: tcp://localhost:26003\n"
+					" -p PUB_STR\tpublisher  port: tcp://localhost:26004\n"
 					" -f LOGFILE\tLog to this file\n");
 				exit(1);
 				break;

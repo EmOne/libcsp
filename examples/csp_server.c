@@ -4,11 +4,6 @@
 #include <stdlib.h>
 #include <getopt.h>
 
-#include <csp/csp.h>
-#include <csp/drivers/usart.h>
-#include <csp/drivers/can_socketcan.h>
-#include <csp/interfaces/csp_if_zmqhub.h>
-
 #include <stdio.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
@@ -16,6 +11,11 @@
 
 #include <linux/can.h>
 #include <linux/can/raw.h>
+
+#include <csp/csp.h>
+#include <csp/drivers/usart.h>
+#include <csp/drivers/can_socketcan.h>
+#include <csp/interfaces/csp_if_zmqhub.h>
 
 /* valid bits in CAN ID for frame formats */
 #define CAN_SFF_MASK 0x000007FFU /* standard frame format (SFF) */
@@ -259,6 +259,18 @@ void server(void) {
 	// };
 	static cu_t cu;
 	struct ifreq ifr;
+	
+	csp_print("CSP zmq to can forwarding -> %d\n", forwarding);
+	csp_print("Server task started\n");
+	
+	/* Create socket with no specific socket options, e.g. accepts CRC32, HMAC, etc. if enabled during compilation */
+	csp_socket_t sock = {0};
+
+	/* Bind socket to all ports, e.g. all incoming connections will be handled here */
+	csp_bind(&sock, CSP_ANY);
+
+	/* Create a backlog of 10 connections, i.e. up to 10 new connections can be queued */
+	csp_listen(&sock, 10);
 
 	if(forwarding) {
 		if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
@@ -278,17 +290,6 @@ void server(void) {
 			exit(EXIT_FAILURE);
 		}
 	}
-
-	csp_print("Server task started\n");
-	
-	/* Create socket with no specific socket options, e.g. accepts CRC32, HMAC, etc. if enabled during compilation */
-	csp_socket_t sock = {0};
-
-	/* Bind socket to all ports, e.g. all incoming connections will be handled here */
-	csp_bind(&sock, CSP_ANY);
-
-	/* Create a backlog of 10 connections, i.e. up to 10 new connections can be queued */
-	csp_listen(&sock, 10);
 
 	/* Wait for connections and then process packets on the connection */
 	while (1) {
@@ -348,19 +349,22 @@ void server(void) {
 static struct option long_options[] = {
     {"kiss-device", required_argument, 0, 'k'},
 #if (CSP_HAVE_LIBSOCKETCAN)
-	#define OPTION_c "cb:"
+	#define OPTION_c "c:"
     {"can-device", required_argument, 0, 'c'},
+	#define OPTION_b "b:"
 	{"can-bps", required_argument, 0, 'b'},
 #else
 	#define OPTION_c
 	#define OPTION_b
 #endif
 #if (CSP_HAVE_LIBZMQ)
-	#define OPTION_z "zf:"
+	#define OPTION_z "z:"
     {"zmq-device", required_argument, 0, 'z'},
+	#define OPTION_f "f:"
 	{"zmq2can", no_argument, 0, 'f'},
 #else
 	#define OPTION_z
+	#define OPTION_f
 #endif
 #if (CSP_USE_RTABLE)
 	#define OPTION_R "R:"
@@ -379,7 +383,7 @@ static struct option long_options[] = {
 void print_help() {
     csp_print("Usage: csp_server [options]\n");
 	if (CSP_HAVE_LIBSOCKETCAN) {
-		csp_print(" -c <can-device>  set CAN device\n");
+		csp_print(" -c <can-device>  set CAN device receiver\n");
 		csp_print(" -b <can-bitrate>  set CAN device bitrate\n");
 	}
 	if (1) {
@@ -387,7 +391,7 @@ void print_help() {
 	}
 	if (CSP_HAVE_LIBZMQ) {
 		csp_print(" -z <zmq-device>  set ZeroMQ device\n");
-		csp_print(" -f forward ZeroMQ to CAN\n");
+		csp_print(" -f               forward ZeroMQ to CAN raw\n");
 	}
 	if (CSP_USE_RTABLE) {
 		csp_print(" -R <rtable>      set routing table\n");
@@ -451,7 +455,7 @@ int main(int argc, char * argv[]) {
 	csp_iface_t * default_iface;
     int opt;
 
-	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_R "k:a:tT:h", long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:a:tT:h", long_options, NULL)) != -1) {
         switch (opt) {
             case 'c':
 				device_name = optarg;
@@ -502,8 +506,8 @@ int main(int argc, char * argv[]) {
         print_help();
         exit(EXIT_FAILURE);
     }
-
-    csp_print("Initialising CSP\n");
+    
+	csp_print("Initialising CSP\n");
 
     /* Init CSP */
     csp_init();
