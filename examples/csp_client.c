@@ -326,7 +326,7 @@ int main(int argc, char * argv[]) {
 			
 		} else {
 			alen = sprintf(frame_buff, "%03X#", 0x201 & 0xfff);
-			alen += sprintf(frame_buff + alen, "%X", count);
+			alen += sprintf(frame_buff + alen, "%0X", count);
 		}
 
 		csp_print("\n");
