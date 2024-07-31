@@ -9,6 +9,10 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #include <linux/can.h>
 #include <linux/can/raw.h>
 
@@ -52,9 +56,16 @@ static bool test_mode = false;
 static unsigned int server_received = 0;
 static unsigned int run_duration_in_sec = 3;
 
-static bool forwarding = false;
+static int forwarding = 0;
 
 static uint32_t can_bps = 1000000;
+
+const char *ip = "127.0.0.1";
+const int port = 10015;
+int sockfd;
+struct sockaddr_in ccsds_addr;
+socklen_t addr_size;
+char ccsds_buffer[1024];
 
 enum DeviceType {
 	DEVICE_UNKNOWN,
@@ -248,21 +259,20 @@ int parse_canframe(char *cs, cu_t *cu)
 
 /* Server task - handles requests from clients */
 void server(void) {
-	
+
 	int s = 0; /* can raw socket */
 	int required_mtu;
 	// int mtu;
 	// int enable_canfx = 1;
-	struct sockaddr_can addr;
+	struct sockaddr_can can_addr;
 	// struct can_raw_vcid_options vcid_opts = {
 	// 	.flags = CAN_RAW_XL_VCID_TX_PASS,
 	// };
 	static cu_t cu;
 	struct ifreq ifr;
-	
-	csp_print("CSP zmq to can forwarding -> %d\n", forwarding);
+
 	csp_print("Server task started\n");
-	
+
 	/* Create socket with no specific socket options, e.g. accepts CRC32, HMAC, etc. if enabled during compilation */
 	csp_socket_t sock = {0};
 
@@ -272,23 +282,42 @@ void server(void) {
 	/* Create a backlog of 10 connections, i.e. up to 10 new connections can be queued */
 	csp_listen(&sock, 10);
 
-	if(forwarding) {
-		if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
-			perror("CAN Socket");
-			exit(EXIT_FAILURE);
-		}
+	switch(forwarding)
+	{
+		case 1:
+			if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
+				perror("CAN Socket");
+				exit(EXIT_FAILURE);
+			}
 
-		strcpy(ifr.ifr_name, "can0" );
-		ioctl(s, SIOCGIFINDEX, &ifr);
+			strcpy(ifr.ifr_name, "can0" );
+			ioctl(s, SIOCGIFINDEX, &ifr);
 
-		memset(&addr, 0, sizeof(addr));
-		addr.can_family = AF_CAN;
-		addr.can_ifindex = ifr.ifr_ifindex;
+			memset(&can_addr, 0, sizeof(can_addr));
+			can_addr.can_family = AF_CAN;
+			can_addr.can_ifindex = ifr.ifr_ifindex;
 
-		if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-			perror("CAN Bind");
-			exit(EXIT_FAILURE);
-		}
+			if (bind(s, (struct sockaddr *)&can_addr, sizeof(can_addr)) < 0) {
+				perror("CAN Bind");
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case 2: //TC CCSDS forwarding
+			//#1 : socket
+			sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+			if(sockfd < 0)
+			{
+				perror("UDP socket");
+				exit(EXIT_FAILURE);
+			}
+			memset(&ccsds_addr, '\0', sizeof(ccsds_addr));
+			ccsds_addr.sin_family = AF_INET;
+			ccsds_addr.sin_port = htons(port);
+			ccsds_addr.sin_addr.s_addr = inet_addr(ip);
+
+			break;
+		default:
+			break;
 	}
 
 	/* Wait for connections and then process packets on the connection */
@@ -308,26 +337,35 @@ void server(void) {
 			case SERVER_PORT:
 				/* Process packet here */
 				csp_print("Packet received on SERVER_PORT: %s\n", (char *) packet->data);
-				
-				if(forwarding) {
-					/* parse CAN frame */
-					required_mtu = parse_canframe((char *) packet->data, &cu);
-					if (!required_mtu) {
-						fprintf(stderr, "\nWrong CAN-frame format!\n\n");
-						// print_usage(argv[0]);
-						// return 1;
-						break;
-					}
 
-					/* send frame */
-					if (write(s, &cu, required_mtu) != required_mtu) {
-						perror("write");
-						// return 1;
-					}
+				/* parse CAN frame */
+				required_mtu = parse_canframe((char *) packet->data, &cu);
+				if (!required_mtu) {
+					fprintf(stderr, "\nWrong CAN-frame format!\n\n");
+					break;
+				}
+
+				switch(forwarding)
+				{
+					case 1:
+						/* send frame */
+						if (write(s, &cu, required_mtu) != required_mtu) {
+							perror("write");
+							// return 1;
+						}
+						break;
+					case 2:
+						//TODO: Parsing CCSDS format
+						memcpy(ccsds_buffer, cu.cc.data, cu.cc.len);
+						sendto(sockfd, ccsds_buffer, cu.cc.len, 0, (struct sockaddr*)&ccsds_addr, sizeof(ccsds_addr));
+  						csp_print("[+]TM Data send: %s len: %d\n", &cu.cc.data, cu.cc.len);
+						break;
+					default:
+						break;
 				}
 
 				csp_buffer_free(packet);
-				++server_received;	
+				++server_received;
 
 				break;
 
@@ -391,7 +429,7 @@ void print_help() {
 	}
 	if (CSP_HAVE_LIBZMQ) {
 		csp_print(" -z <zmq-device>  set ZeroMQ device\n");
-		csp_print(" -f <0|1>         forward ZeroMQ to CAN raw\n");
+		csp_print(" -f <0|1|2>        ZeroMQ forwarding 0:disable 1:CAN raw 2: YAMCS CCSDS\n");
 	}
 	if (CSP_USE_RTABLE) {
 		csp_print(" -R <rtable>      set routing table\n");
@@ -474,6 +512,7 @@ int main(int argc, char * argv[]) {
                 break;
 			case 'f':
 				forwarding = atoi(optarg);
+				csp_print("Forwarding: %d\n",forwarding);
                 break;
 #if (CSP_USE_RTABLE)
             case 'R':
@@ -506,7 +545,7 @@ int main(int argc, char * argv[]) {
         print_help();
         exit(EXIT_FAILURE);
     }
-    
+
 	csp_print("Initialising CSP\n");
 
     /* Init CSP */
