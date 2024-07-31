@@ -366,16 +366,16 @@ int main(int argc, char * argv[]) {
 				break;
 			case 2: // forwarding the received TC from CCSDS
 				addr_size = sizeof(ccsds_addr);
-  				alen = recvfrom(sockfd, buffer, 4096, 0, (struct sockaddr*)&ccsds_addr, &addr_size);
+  				nbytes = recvfrom(sockfd, buffer, 4096, 0, (struct sockaddr*)&ccsds_addr, &addr_size);
 
-				csp_print("[+]CCSDS Data recv: %s (%X) len:%d\n", buffer, buffer, alen);
+				csp_print("[+]CCSDS Data recv: %s (%X) len:%d\n", buffer, buffer, nbytes);
 
-				alen = sprintf(frame_buff, "%03X#",  (uint16_t)buffer[0] & 0xfff);
+				alen = sprintf(frame_buff, "%03X#",  (uint16_t)(buffer[0]<<8|buffer[1]) & 0xfff);
 
-				for (i = 3; i < 11; i++)
+				for (i = 2; i < nbytes; i++)
 				{
-					csp_print("%02X ",buffer[i]);
-					alen += sprintf(frame_buff + alen, "%02X", buffer[i]);
+					csp_print("%02X ", (uint8_t)buffer[i]);
+					alen += sprintf(frame_buff + alen, "%02X", (uint8_t) buffer[i]);
 				}
 				break;
 			default:
