@@ -24,3 +24,5 @@ GRTAGS
 GTAGS
 .vscode/
 build-docs
+/.cache/
+/.history/
