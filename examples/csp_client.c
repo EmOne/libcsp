@@ -370,16 +370,21 @@ int main(int argc, char * argv[]) {
 
 				csp_print("[+]CCSDS Data recv: %s (%X) len:%d\n", buffer, buffer, nbytes);
 
-				alen = sprintf(frame_buff, "%03X#",  (uint16_t)(buffer[0]<<8|buffer[1]) & 0xfff);
+				//ID
+				alen = sprintf(frame_buff, "%03X#",  (uint16_t)(buffer[6]<<8|buffer[7]) & 0xfff);
 
-				for (i = 2; i < nbytes; i++)
+				//SEQ
+				alen += sprintf(frame_buff + alen, "%04X",  (uint16_t)(buffer[2]<<8|buffer[3]) & 0xfff);
+
+				//Payload
+				for (i = 8; i < nbytes; i++)
 				{
 					csp_print("%02X ", (uint8_t)buffer[i]);
 					alen += sprintf(frame_buff + alen, "%02X", (uint8_t) buffer[i]);
 				}
 				break;
 			default:
-				alen = sprintf(frame_buff, "%03X#", 0x201 & 0xfff);
+				alen = sprintf(frame_buff, "%03X#", 0x200 & 0xfff);
 				alen += sprintf(frame_buff + alen, "%08X", count);
 				break;
 		}
