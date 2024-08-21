@@ -1,0 +1,12 @@
+[Unit]
+Description=CSP client service
+Wants=network.target
+After=zmqproxy.service
+
+[Service]
+Type=simple
+PIDFile=/run/csp_client.pid
+ExecStart=/usr/local/bin/csp_client -z 10.1.1.138 -f 1 -a 3 -C 2
+
+[Install]
+WantedBy=multi-user.target
