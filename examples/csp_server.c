@@ -258,8 +258,9 @@ int parse_canframe(char *cs, cu_t *cu)
 }
 
 /* Server task - handles requests from clients */
-void server(void) {
-
+void server(void)
+{
+	uint32_t tmp = 0;
 	int s = 0; /* can raw socket */
 	int required_mtu;
 	// int mtu;
@@ -356,9 +357,35 @@ void server(void) {
 						break;
 					case 2:
 						//TODO: Parsing CCSDS format
-						memcpy(ccsds_buffer, cu.cc.data, cu.cc.len);
-						sendto(sockfd, ccsds_buffer, cu.cc.len, 0, (struct sockaddr*)&ccsds_addr, sizeof(ccsds_addr));
-  						csp_print("[+]TM Data send: %s len: %d\n", &cu.cc.data, cu.cc.len);
+						//Version 	 3  bits
+						//Type 		 1  bit
+						//Sec_hdr	 1  bit
+						//APID		11 	bits
+						//Group		 2	bits
+						//SEQ		14  bits
+						//len		16	bits
+						tmp = (uint32_t) ((uint32_t)(0 << 14) | (uint32_t)(0 << 13) | \
+														(uint32_t)(0 << 12) | (uint32_t)(0 << 11) | \
+														(uint32_t)(300 & 0x7ff));
+						ccsds_buffer[0] = (uint8_t) ((tmp & 0x0000FF00) >> 8);
+						ccsds_buffer[1] = (uint8_t) ((tmp & 0x000000FF) >> 0);
+						tmp = ((uint32_t) (3 << 14)) | (((uint32_t)cu.cc.data[0] << 8 | (uint32_t)cu.cc.data[1]) & 0x00003FFF) ;
+						ccsds_buffer[2] = (uint8_t) ((tmp & 0x0000FF00) >> 8);
+						ccsds_buffer[3] = (uint8_t) ((tmp & 0x000000FF) >> 0);
+						tmp = (uint32_t) cu.cc.len;
+						ccsds_buffer[4] = (uint8_t) ((tmp >> 8) & 0xFF);
+						ccsds_buffer[5] = (uint8_t) ((tmp >> 0) & 0xFF);
+						memcpy((uint8_t *) &ccsds_buffer[6], (uint8_t *) cu.cc.data, cu.cc.len);
+
+						csp_print("[+]TM Data send: ");
+						for (int i = 0; i < cu.cc.len + 6; i++)
+						{
+							csp_print("%02X ", (uint8_t) ccsds_buffer[i]);
+
+						}
+						csp_print("Len: %d\n", cu.cc.len + 6);
+						sendto(sockfd, ccsds_buffer, cu.cc.len + 6, 0, (struct sockaddr*)&ccsds_addr, sizeof(ccsds_addr));
+
 						break;
 					default:
 						break;
