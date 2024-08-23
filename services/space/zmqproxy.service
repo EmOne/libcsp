@@ -2,9 +2,11 @@
 Wants=network.target
 
 [Service]
+User=pi
 Type=simple
 PIDFile=/run/zmqproxy.pid
 ExecStart=/usr/local/bin/zmqproxy
+WorkingDirectory=/home/pi/Projects/licsp/build/examples/
 
 [Install]
 WantedBy=multi-user.target

@@ -4,9 +4,11 @@ Wants=network.target
 After=zmqproxy.service
 
 [Service]
+User=pi
 Type=simple
 PIDFile=/run/csp_server.pid
 ExecStart=/usr/local/bin/csp_server -z 10.1.1.138 -f 1 -a 5
+WorkingDirectory=/home/pi/Projects/libcsp/build/examples/
 
 [Install]
 WantedBy=multi-user.target
