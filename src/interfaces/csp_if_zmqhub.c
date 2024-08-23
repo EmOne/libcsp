@@ -82,7 +82,7 @@ void * csp_zmqhub_task(void * param) {
 		}
 
 		// Create new csp packet
-		packet = csp_buffer_get(datalen - HEADER_SIZE);
+		packet = csp_buffer_get(0);
 		if (packet == NULL) {
 			unsigned int remaining = csp_buffer_remaining();
 			csp_print("RX %s: Get csp_buffer_remaining (%u)\n", drv->iface.name, remaining);

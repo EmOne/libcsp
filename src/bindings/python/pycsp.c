@@ -587,6 +587,8 @@ static PyObject * pycsp_rdp_get_opt(PyObject * self, PyObject * args) {
 						 ack_delay_count);
 }
 
+#if CSP_USE_RTABLE
+
 static PyObject * pycsp_rtable_set(PyObject * self, PyObject * args) {
 	uint16_t node;
 	int mask;
@@ -635,13 +637,15 @@ static PyObject * pycsp_rtable_load(PyObject * self, PyObject * args) {
 	return Py_BuildValue("i", res);
 }
 
-static PyObject * pycsp_buffer_get(PyObject * self, PyObject * args) {
-	unsigned long size;
-	if (!PyArg_ParseTuple(args, "k", &size)) {
-		return NULL;  // TypeError is thrown
-	}
+static PyObject * pycsp_print_routes(PyObject * self, PyObject * args) {
+	csp_rtable_print();
+	Py_RETURN_NONE;
+}
 
-	void * packet = csp_buffer_get(size);
+#endif
+
+static PyObject * pycsp_buffer_get(PyObject * self, PyObject * args) {
+	void * packet = csp_buffer_get(0);
 	if (packet == NULL) {
 		return PyErr_Error("csp_buffer_get() - no free buffers or data overrun", CSP_ERR_NOMEM);
 	}
@@ -927,11 +931,6 @@ static PyObject * pycsp_print_connections(PyObject * self, PyObject * args) {
 	Py_RETURN_NONE;
 }
 
-static PyObject * pycsp_print_routes(PyObject * self, PyObject * args) {
-	csp_rtable_print();
-	Py_RETURN_NONE;
-}
-
 static PyObject * pycsp_print_interfaces(PyObject * self, PyObject * args) {
 	csp_iflist_print();
 	Py_RETURN_NONE;
@@ -970,11 +969,14 @@ static PyMethodDef methods[] = {
 	{"rdp_set_opt", pycsp_rdp_set_opt, METH_VARARGS, ""},
 	{"rdp_get_opt", pycsp_rdp_get_opt, METH_NOARGS, ""},
 
+#if CSP_USE_RTABLE
 	/* csp/csp_rtable.h */
 	{"rtable_set", pycsp_rtable_set, METH_VARARGS, ""},
 	{"rtable_clear", pycsp_rtable_clear, METH_NOARGS, ""},
 	{"rtable_check", pycsp_rtable_check, METH_VARARGS, ""},
 	{"rtable_load", pycsp_rtable_load, METH_VARARGS, ""},
+	{"print_routes", pycsp_print_routes, METH_NOARGS, ""},
+#endif
 
 	/* csp/csp_buffer.h */
 	{"buffer_free", pycsp_buffer_free, METH_VARARGS, ""},
@@ -1003,7 +1005,6 @@ static PyMethodDef methods[] = {
 	{"packet_get_data", pycsp_packet_get_data, METH_O, ""},
 	{"packet_set_data", pycsp_packet_set_data, METH_VARARGS, ""},
 	{"print_connections", pycsp_print_connections, METH_NOARGS, ""},
-	{"print_routes", pycsp_print_routes, METH_NOARGS, ""},
 	{"print_interfaces", pycsp_print_interfaces, METH_NOARGS, ""},
 
 	/* sentinel */
