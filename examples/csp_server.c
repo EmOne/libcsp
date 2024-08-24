@@ -79,6 +79,11 @@ struct canxl_frame {
 };
 #endif
 
+#define CANXL_MTU	(sizeof(struct canxl_frame))
+#define CANXL_HDR_SIZE	(offsetof(struct canxl_frame, data))
+#define CANXL_MIN_MTU	(CANXL_HDR_SIZE + 64)
+#define CANXL_MAX_MTU	CANXL_MTU
+
 /* CAN CC/FD/XL frame union */
 typedef union {
 	struct can_frame cc;
