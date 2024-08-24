@@ -1,0 +1,11 @@
+[Unit]
+Description=CSP ZMQ service
+Wants=network.target
+
+[Service]
+Type=simple
+PIDFile=/run/zmqproxy.pid
+ExecStart=/usr/local/bin/zmqproxy
+
+[Install]
+WantedBy=multi-user.target
