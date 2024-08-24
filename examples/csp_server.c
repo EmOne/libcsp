@@ -20,7 +20,7 @@
 #include <csp/drivers/can_socketcan.h>
 #include <csp/interfaces/csp_if_zmqhub.h>
 
-#ifndef CANXL_XLF
+
 /*
  * CAN XL payload length and DLC definitions according to ISO 11898-1
  * CAN XL DLC ranges from 0 .. 2047 => data length from 1 .. 2048 byte
@@ -56,6 +56,7 @@
 #define CANXL_VCID_VAL_MASK 0xFFUL /* VCID is an 8-bit value */
 #define CANXL_VCID_MASK (CANXL_VCID_VAL_MASK << CANXL_VCID_OFFSET)
 
+#if 0
 /**
  * struct canxl_frame - CAN with e'X'tended frame 'L'ength frame structure
  * @prio:  11 bit arbitration priority with zero'ed CAN_*_FLAG flags / VCID
