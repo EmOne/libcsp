@@ -1,6 +1,12 @@
-![CI Status](https://github.com/libcsp/libcsp/actions/workflows/build-test.yml/badge.svg)
-
 # The Cubesat Space Protocol
+
+[![CI Status](https://github.com/libcsp/libcsp/actions/workflows/build-test.yml/badge.svg)](https://github.com/libcsp/libcsp/actions/workflows/build-test.yml)
+[![Code Coverage](https://codecov.io/gh/libcsp/libcsp/branch/develop/graph/badge.svg)](https://codecov.io/gh/libcsp/libcsp)
+[![Documentation](https://img.shields.io/readthedocs/pip/stable.svg)](https:/libcsp.github.io/libcsp)
+[![GitHub version](https://badge.fury.io/gh/libcsp%2Flibcsp.svg)](https://badge.fury.io/gh/libcsp%2Flibcsp)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/mit)
+[![PyPI version](https://badge.fury.io/py/libcsp.svg)](https://badge.fury.io/py/libcsp)
+<!-- [![Release](https://github.com/libcsp/libcsp/actions/workflows/release.yml/badge.svg)](https://github.com/emone/libcsp/actions/workflows/release.yml) -->
 
 ![CSP](./doc/_images/csp.png)
 
@@ -27,18 +33,18 @@ any master node required. Using a service oriented architecture has
 several advantages compared to the traditional mater/slave topology used
 on many cubesats.
 
-  - Standardised network protocol: All subsystems can communicate with
+- Standardised network protocol: All subsystems can communicate with
     eachother (multi-master)
-  - Service loose coupling: Services maintain a relationship that
+- Service loose coupling: Services maintain a relationship that
     minimizes dependencies between subsystems
-  - Service abstraction: Beyond descriptions in the service contract,
+- Service abstraction: Beyond descriptions in the service contract,
     services hide logic from the outside world
-  - Service reusability: Logic is divided into services with the
+- Service reusability: Logic is divided into services with the
     intention of promoting reuse.
-  - Service autonomy: Services have control over the logic they
+- Service autonomy: Services have control over the logic they
     encapsulate.
-  - Service Redundancy: Easily add redundant services to the bus
-  - Reduces single point of failure: The complexity is moved from a
+- Service Redundancy: Easily add redundant services to the bus
+- Reduces single point of failure: The complexity is moved from a
     single master node to several well defined services on the network
 
 The implementation of `libcsp` is written
@@ -47,18 +53,18 @@ to have some rather advanced features as well.
 
 ## Features
 
-  - Thread safe Socket API
-  - Router task with Quality of Services
-  - Connection-oriented operation (RFC 908 and 1151).
-  - Connection-less operation (similar to UDP)
-  - ICMP-like requests such as ping and buffer status.
-  - Loopback interface
-  - Very Small Footprint in regards to code and memory required
-  - Zero-copy buffer and queue system
-  - Modular network interface system
-  - OS abstraction, currently ported to: FreeRTOS, Zephyr, Linux
-  - Broadcast traffic
-  - Promiscuous mode
+- Thread safe Socket API
+- Router task with Quality of Services
+- Connection-oriented operation (RFC 908 and 1151).
+- Connection-less operation (similar to UDP)
+- ICMP-like requests such as ping and buffer status.
+- Loopback interface
+- Very Small Footprint in regards to code and memory required
+- Zero-copy buffer and queue system
+- Modular network interface system
+- OS abstraction, currently ported to: FreeRTOS, Zephyr, Linux
+- Broadcast traffic
+- Promiscuous mode
 
 ## Documentation
 
