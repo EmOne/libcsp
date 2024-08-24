@@ -172,7 +172,7 @@ int main(int argc, char * argv[]) {
 	char frame_buff[32];
 	char buffer[4096];
 	size_t alen = 0;
-	const uint32_t HEADER_SIZE = (csp_conf.version == 2) ? 6 : 4;
+	// const uint32_t HEADER_SIZE = (csp_conf.version == 2) ? 6 : 4;
 
 	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:a:C:tT:h", long_options, NULL)) != -1) {
         switch (opt) {
@@ -393,7 +393,7 @@ int main(int argc, char * argv[]) {
 		csp_print("\n");
 
 		/* 2. Get packet buffer for message/data */
-		csp_packet_t * packet = csp_buffer_get(alen + HEADER_SIZE);
+		csp_packet_t * packet = csp_buffer_get(0);
 		if (packet == NULL) {
 			/* Could not get buffer element */
 			csp_print("Failed to get CSP buffer\n");
