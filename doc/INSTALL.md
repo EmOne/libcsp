@@ -35,8 +35,13 @@ To configure CSP to build with the AVR32 toolchain for FreeRTOS and
 output the compiled libcsp.a and header files to the install directory,
 issue:
 
+For AVR32
 ```shell
 ./waf configure --toolchain=avr32- --with-os=freertos --prefix=install
+```
+For STM32 and toolchain (gcc-arm-none-eabi-10.3-2021.10)
+```shell
+./waf configure --toolchain=arm-none-eabi- --with-os=freertos --prefix=build/lib --includes=../FreeRTOS/Source/include/,../../../Core/Inc/,../FreeRTOS/Source/portable/GCC/ARM_CM4F/,/usr/share/gcc-arm-none-eabi-10.3-2021.10/arm-none-eabi/include/ --enable-reproducible-builds
 ```
 
 When compiling for FreeRTOS, the path to the FreeRTOS header files must
