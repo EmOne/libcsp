@@ -5,7 +5,7 @@
 
 #include <csp/csp.h>
 #include <csp/csp_debug.h>
-#include <endian.h>
+#include <portable_endian.h>
 #include <csp/csp_crc32.h>
 #include <csp/csp_rtable.h>
 #include <csp/interfaces/csp_if_lo.h>

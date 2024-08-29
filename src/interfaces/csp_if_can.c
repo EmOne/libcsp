@@ -4,7 +4,7 @@
 
 #include <string.h>
 #include <stdlib.h>
-#include <endian.h>
+#include <portable_endian.h>
 
 #include <csp/csp.h>
 #include <csp/csp_id.h>

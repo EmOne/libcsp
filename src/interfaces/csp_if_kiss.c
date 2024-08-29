@@ -10,7 +10,7 @@
 #include <csp/drivers/usart.h>
 #include <string.h>
 
-#include <endian.h>
+#include <portable_endian.h>
 #include <csp/csp_crc32.h>
 #include <csp/csp_id.h>
 

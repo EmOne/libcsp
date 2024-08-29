@@ -3,7 +3,7 @@
 #include <csp/csp_crc32.h>
 #include <csp/csp_id.h>
 
-#include <endian.h>
+#include <portable_endian.h>
 
 #ifdef __AVR__
 #include <avr/pgmspace.h>
@@ -132,7 +132,7 @@ int csp_crc32_verify(csp_packet_t * packet) {
 		if (memcmp(&packet->data[packet->length] - sizeof(crc), &crc, sizeof(crc)) != 0) {
 			return CSP_ERR_CRC32;
 		}
-		
+
 	}
 
 	/* Strip CRC32 */
