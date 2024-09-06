@@ -41,7 +41,7 @@ For AVR32
 ```
 For STM32 and toolchain (gcc-arm-none-eabi-10.3-2021.10)
 ```shell
-./waf configure --toolchain=arm-none-eabi- --with-os=freertos --prefix=build/lib --includes=../FreeRTOS/Source/include/,../../../Core/Inc/,../FreeRTOS/Source/portable/GCC/ARM_CM4F/,/usr/share/gcc-arm-none-eabi-10.3-2021.10/arm-none-eabi/include/ --enable-reproducible-builds
+./waf configure --toolchain=arm-none-eabi- --with-os=freertos --prefix=build/lib --includes=../FreeRTOS/Source/include/,../../../Core/Inc/,../FreeRTOS/Source/portable/GCC/ARM_CM4F/,/usr/share/gcc-arm-none-eabi-10.3-2021.10/arm-none-eabi/include/ --enable-reproducible-builds --abi=hard
 ```
 
 When compiling for FreeRTOS, the path to the FreeRTOS header files must
