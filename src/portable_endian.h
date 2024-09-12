@@ -13,7 +13,7 @@
 
 #endif
 
-#if defined(__ICCARM__) || defined(__CC_ARM) || defined(__GNUC__)
+#if defined(__ICCARM__) || defined(__CC_ARM)
 
 	/*
 	 * GNU ARM toolchain, and possibly other bare-metal toolchains
