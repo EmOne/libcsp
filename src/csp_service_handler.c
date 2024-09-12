@@ -218,10 +218,6 @@ void csp_service_handler(csp_packet_t * packet) {
 			}
 			break;
 
-		case CSP_PING:
-			/* A ping means, just echo the packet, so no changes */
-			break;
-
 		case CSP_PS: {
 			packet->length = csp_ps_hook(packet);
 			if (packet->length == 0) {
@@ -275,12 +271,14 @@ void csp_service_handler(csp_packet_t * packet) {
 			break;
 		}
 
+	case CSP_PING:
+		/* A ping means, just echo the packet, so no changes */
 		default:
+		if (packet != NULL)
+		{
+			csp_sendto_reply(packet, packet, CSP_O_SAME);
+		}
 			csp_buffer_free(packet);
 			return;
-	}
-
-	if (packet != NULL) {
-		csp_sendto_reply(packet, packet, CSP_O_SAME);
 	}
 }
