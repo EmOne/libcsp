@@ -3,7 +3,7 @@
 #include <csp/interfaces/csp_if_eth_pbuf.h>
 #include <csp/arch/csp_time.h>
 
-#include <endian.h>
+#include <portable_endian.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>

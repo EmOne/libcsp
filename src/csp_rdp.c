@@ -8,7 +8,7 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <endian.h>
+#include <portable_endian.h>
 
 #include <csp/csp.h>
 #include <csp/csp_debug.h>
