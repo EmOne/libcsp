@@ -27,3 +27,4 @@ build-docs
 /.cache/
 /.history/
 /venv/
+/.venv/

@@ -24,10 +24,12 @@ extern "C" {
  *            bitrate on the CAN device - this may require increased OS privileges.
  * @param[in] promisc if true, receive all CAN frames. If false a filter
  *                    is set on the CAN device, using device->addr
+ * @param[in] filter_addr filter CAN address
+ * @param[in] filter_mask filter CAN mask
  * @param[out] return_iface the added interface.
  * @return The added interface, or NULL in case of failure.
  */
-int csp_can_socketcan_open_and_add_interface(const char * device, const char * ifname, unsigned int node_id, int bitrate, bool promisc, csp_iface_t ** return_iface);
+int csp_can_socketcan_open_and_add_interface(const char * device, const char * ifname, unsigned int node_id, int bitrate, bool promisc, uint16_t filter_addr, uint16_t filter_mask, csp_iface_t ** return_iface);
 
 /**
  * Initialize socketcan and add CSP interface.
@@ -41,9 +43,11 @@ int csp_can_socketcan_open_and_add_interface(const char * device, const char * i
  *            bitrate on the CAN device - this may require increased OS privileges.
  * @param[in] promisc if true, receive all CAN frames. If false a filter
  *                    is set on the CAN device, using device->addr
+ * @param[in] filter_addr filter CAN address
+ * @param[in] filter_mask filter CAN mask
  * @return The added interface, or NULL in case of failure.
  */
-csp_iface_t * csp_can_socketcan_init(const char * device, unsigned int node_id, int bitrate, bool promisc);
+csp_iface_t * csp_can_socketcan_init(const char * device, unsigned int node_id, int bitrate, bool promisc, uint16_t filter_addr, uint16_t filter_mask);
 
 /**
  * Stop the Rx thread and free resources (testing).

@@ -120,11 +120,14 @@ static int csp_can_tx_frame(void * driver_data, uint32_t id, const uint8_t * dat
 }
 
 
-int csp_can_socketcan_set_promisc(const bool promisc, can_context_t * ctx) {
+int csp_can_socketcan_set_promisc(const bool promisc, can_context_t * ctx, uint16_t filter_addr, uint16_t filter_mask) {
 	struct can_filter filter = {
 		.can_id = CFP_MAKE_DST(ctx->iface.addr),
 		.can_mask = 0x0000, /* receive anything */
 	};
+
+    filter.can_id = (csp_conf.version == 1) ? CFP_MAKE_DST(filter_addr) : (unsigned int) (filter_addr << CFP2_DST_OFFSET);
+	filter.can_mask = (csp_conf.version == 1) ? CFP_MAKE_DST(filter_mask) : (unsigned int) (filter_mask << CFP2_DST_OFFSET);
 
 	if (ctx->socket == 0) {
 		return CSP_ERR_INVAL;
@@ -149,7 +152,7 @@ int csp_can_socketcan_set_promisc(const bool promisc, can_context_t * ctx) {
 }
 
 
-int csp_can_socketcan_open_and_add_interface(const char * device, const char * ifname, unsigned int node_id, int bitrate, bool promisc, csp_iface_t ** return_iface) {
+int csp_can_socketcan_open_and_add_interface(const char * device, const char * ifname, unsigned int node_id, int bitrate, bool promisc, uint16_t filter_addr, uint16_t filter_mask, csp_iface_t ** return_iface) {
 	if (ifname == NULL) {
 		ifname = CSP_IF_CAN_DEFAULT_NAME;
 	}
@@ -208,7 +211,7 @@ int csp_can_socketcan_open_and_add_interface(const char * device, const char * i
 	}
 
 	/* Set filter mode */
-	if (csp_can_socketcan_set_promisc(promisc, ctx) != CSP_ERR_NONE) {
+	if (csp_can_socketcan_set_promisc(promisc, ctx, filter_addr, filter_mask) != CSP_ERR_NONE) {
 		csp_print("%s[%s]: csp_can_socketcan_set_promisc() failed, error: %s\n", __func__, ctx->name, strerror(errno));
 		return CSP_ERR_INVAL;
 	}
@@ -235,9 +238,9 @@ int csp_can_socketcan_open_and_add_interface(const char * device, const char * i
 	return CSP_ERR_NONE;
 }
 
-csp_iface_t * csp_can_socketcan_init(const char * device, unsigned int node_id, int bitrate, bool promisc) {
+csp_iface_t * csp_can_socketcan_init(const char * device, unsigned int node_id, int bitrate, bool promisc, uint16_t filter_addr, uint16_t filter_mask) {
 	csp_iface_t * return_iface;
-	int res = csp_can_socketcan_open_and_add_interface(device, CSP_IF_CAN_DEFAULT_NAME, node_id, bitrate, promisc, &return_iface);
+	int res = csp_can_socketcan_open_and_add_interface(device, CSP_IF_CAN_DEFAULT_NAME, node_id, bitrate, promisc, filter_addr , filter_mask, &return_iface);
 	return (res == CSP_ERR_NONE) ? return_iface : NULL;
 }
 
