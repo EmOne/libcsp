@@ -51,6 +51,7 @@ def build_with_waf():
         '--enable-if-zmqhub',
         '--enable-examples',
         '--enable-yaml',
+        '--enable-rtable',
     ]
 
     subprocess.check_call(['./waf', 'distclean', 'configure', 'build'])
