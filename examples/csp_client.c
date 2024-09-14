@@ -135,7 +135,7 @@ csp_iface_t * add_interface(enum DeviceType device_type, const char * device_nam
     }
 
 	if (CSP_HAVE_LIBSOCKETCAN && (device_type == DEVICE_CAN)) {
-		int error = csp_can_socketcan_open_and_add_interface(device_name, CSP_IF_CAN_DEFAULT_NAME, client_address, can_bps, true, &default_iface);
+		int error = csp_can_socketcan_open_and_add_interface(device_name, CSP_IF_CAN_DEFAULT_NAME, client_address, can_bps, true, 0xFFFF, 0x0000, &default_iface);
         if (error != CSP_ERR_NONE) {
 			csp_print("failed to add CAN interface [%s], error: %d\n", device_name, error);
             exit(1);
