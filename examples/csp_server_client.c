@@ -19,9 +19,9 @@ int client_start(void);
 
 /* Server port, the port the server listens on for incoming connections from the client. */
 #define MY_SERVER_PORT		10
+#define SERVER_TC_PORT		13
 #define SERVER_ACK_PORT		14
 #define SERVER_STATUS_PORT	15
-#define SERVER_TC_PORT		MY_SERVER_PORT
 
 /* Commandline options */
 static uint8_t server_address = 10;
@@ -46,6 +46,7 @@ void server(void) {
 
 	csp_packet_t *packet;
 	int dport;
+	// int sport;
 
 	csp_print("Server task started\n");
 
@@ -69,15 +70,16 @@ void server(void) {
 			continue;
 		}
 
-		/* Read packets on connection, timout is 1000 mS */
-		while ((packet = csp_read(conn, 1000)) != NULL) {
+		/* Read packets on connection, timout is 50 mS */
+		while ((packet = csp_read(conn, 50)) != NULL) {
 			dport = csp_conn_dport(conn);
+			// sport = csp_conn_sport(conn);
 			switch (dport) {
 			case SERVER_STATUS_PORT:
 				csp_print("Status received on PORT %d: %s\n", dport, (char *) packet->data);
 				csp_buffer_free(packet);
 				break;
-			case MY_SERVER_PORT:
+			case SERVER_TC_PORT:
 				/* Process packet here */
 				csp_print("Packet received on PORT %d: %s\n", dport, (char *) packet->data);
 				csp_buffer_free(packet);
@@ -119,21 +121,22 @@ void client(void) {
 
 		usleep(test_mode ? 200000 : 1000000);
 
-		while(successful_ping == 0) {
-			/* Send ping to server, timeout 1000 mS, ping size 10 bytes */
-			int result = csp_ping(server_address, 1000, 10, CSP_O_NONE);
-			csp_print("Ping address: %u, result %d [mS]\n", server_address, result);
-			// Increment successful_ping if ping was successful
-			if (result >= 0) {
-				++successful_ping;
-			} 
-			else 
-			{
-				/* Send reboot request to server, the server has no actual implementation of csp_sys_reboot() and fails to reboot */
-				csp_reboot(server_address);
-				csp_print("reboot system request sent to address: %u\n", server_address);
-			}
+		/* Send ping to server, timeout 1000 mS, ping size 10 bytes */
+		int result = csp_ping(server_address, 1000, 10, CSP_O_NONE);
+		csp_print("Ping address: %u, result %d [mS]\n", server_address, result);
+		// Increment successful_ping if ping was successful
+		if (result >= 0) {
+			++successful_ping;
+		} 
+		else 
+		{
+			/* Send reboot request to server, the server has no actual implementation of csp_sys_reboot() and fails to reboot */
+			csp_reboot(server_address);
+			csp_print("reboot system request sent to address: %u\n", server_address);
+			usleep(1000000);
+			continue;
 		}
+		
 		
 		/* Send data packet (string) to server */
 
@@ -185,17 +188,6 @@ void client(void) {
 
 		/* 5. Send packet */
 		csp_send(conn, packet);
-		packet = csp_read(conn, 1000);
-		if(packet != NULL){
-			int dp = csp_conn_dport(conn);
-			csp_print("ACK Packet recv on PORT (%d): %s (%ld)\n",
-						dp,
-						(char*) packet->data, packet->length);
-		} 
-		else 
-		{
-			successful_ping = 0;
-		}
 
 		/* 6. Close connection */
 		csp_buffer_free(packet);
