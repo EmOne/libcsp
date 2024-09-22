@@ -24,8 +24,8 @@ int client_start(void);
 #define SERVER_STATUS_PORT	15
 
 /* Commandline options */
-static uint8_t server_address = 10;
-
+static uint8_t server_address = 11;
+static uint8_t address = 10;
 /* test mode, used for verifying that host & client can exchange packets over the loopback interface */
 static bool test_mode = false;
 static unsigned int server_received = 0;
@@ -210,7 +210,7 @@ csp_iface_t * add_interface(enum DeviceType device_type, const char * device_nam
             .stopbits = 1,
             .paritysetting = 0,
 		};
-        int error = csp_usart_open_and_add_kiss_interface(&conf, CSP_IF_KISS_DEFAULT_NAME, server_address, &default_iface);
+        int error = csp_usart_open_and_add_kiss_interface(&conf, CSP_IF_KISS_DEFAULT_NAME, address, &default_iface);
         if (error != CSP_ERR_NONE) {
             csp_print("failed to add KISS interface [%s], error: %d\n", device_name, error);
             exit(1);
@@ -220,7 +220,7 @@ csp_iface_t * add_interface(enum DeviceType device_type, const char * device_nam
     }
 
     if (CSP_HAVE_LIBSOCKETCAN && (device_type == DEVICE_CAN)) {
-        int error = csp_can_socketcan_open_and_add_interface(device_name, CSP_IF_CAN_DEFAULT_NAME, server_address, can_bps, true, 11, 0, &default_iface);
+        int error = csp_can_socketcan_open_and_add_interface(device_name, CSP_IF_CAN_DEFAULT_NAME, address, can_bps, true, 11, 0, &default_iface);
         if (error != CSP_ERR_NONE) {
             csp_print("failed to add CAN interface [%s], error: %d\n", device_name, error);
             exit(1);
@@ -229,7 +229,7 @@ csp_iface_t * add_interface(enum DeviceType device_type, const char * device_nam
     }
 
     if (CSP_HAVE_LIBZMQ && (device_type == DEVICE_ZMQ)) {
-        int error = csp_zmqhub_init(server_address, device_name, 0, &default_iface);
+        int error = csp_zmqhub_init(address, device_name, 0, &default_iface);
         if (error != CSP_ERR_NONE) {
             csp_print("failed to add ZMQ interface [%s], error: %d\n", device_name, error);
             exit(1);
@@ -258,7 +258,7 @@ int main(int argc, char * argv[]) {
 
 	const char * device_name = NULL;
 	enum DeviceType device_type = DEVICE_UNKNOWN;
-    uint8_t address = 0;
+ 
     int opt;
 	const char * rtable __maybe_unused = NULL;
 	csp_iface_t * default_iface;
