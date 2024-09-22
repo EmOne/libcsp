@@ -16,7 +16,7 @@ def build_with_meson():
                'examples/zmqproxy']
     builddir = 'build'
 
-    meson_setup = ['meson', 'setup', builddir]
+    meson_setup = ['meson', 'setup', builddir, "-Denable_python3_bindings=true", "-Duse_rtable=true"]
     meson_compile = ['ninja', '-C', builddir]
     subprocess.check_call(meson_setup)
     subprocess.check_call(meson_compile + targets)
@@ -30,7 +30,7 @@ def build_with_cmake():
                'examples/zmqproxy']
     builddir = 'build'
 
-    cmake_setup = ['cmake', '-GNinja', '-B' + builddir]
+    cmake_setup = ['cmake', '-GNinja', '-B' + builddir, "-DCSP_ENABLE_PYTHON3_BINDINGS=1", "-DCSP_USE_RTABLE=1"]
     cmake_compile = ['ninja', '-C', builddir]
     subprocess.check_call(cmake_setup)
     subprocess.check_call(cmake_compile + targets)
