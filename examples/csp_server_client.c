@@ -113,8 +113,7 @@ void client(void) {
 
 	uint16_t count = 0;
     uint8_t csend[8] = {0};
-    server_address = 11;
-
+    
 	csp_packet_t * packet;
 
 	while (1) {
@@ -305,9 +304,7 @@ int main(int argc, char * argv[]) {
 
 	// If more than one of the interfaces are set, print a message and exit
 	if (device_type == DEVICE_UNKNOWN) {
-		csp_print("Only one of the interfaces can be set.\n");
-        print_usage();
-        exit(EXIT_FAILURE);
+		csp_print("loopback interfaces set.\n");
     } else {
 		csp_print("%s interfaces set.\n", device_name);
 	}
