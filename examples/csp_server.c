@@ -36,6 +36,9 @@ int parse_canframe(char *cs, cu_t *cu);
 
 /* Server port, the port the server listens on for incoming connections from the client. */
 #define SERVER_PORT		10
+#define SERVER_TC_PORT		13
+#define SERVER_ACK_PORT		14
+#define SERVER_STATUS_PORT	15
 
 /* Commandline options */
 static uint8_t server_address = 0;
@@ -62,6 +65,8 @@ enum DeviceType {
 	DEVICE_KISS,
 	DEVICE_ZMQ,
 };
+
+static csp_iface_t * default_iface;
 
 #define __maybe_unused __attribute__((__unused__))
 
@@ -260,6 +265,8 @@ void server(void)
 	// };
 	static cu_t cu;
 	struct ifreq ifr;
+	csp_iface_t * fwd_iface;
+	int dp;
 
 	csp_print("Server task started\n");
 
@@ -306,6 +313,26 @@ void server(void)
 			ccsds_addr.sin_addr.s_addr = inet_addr(ip);
 
 			break;
+		case 3: // CAN bridge
+			int error = csp_can_socketcan_open_and_add_interface("can0", CSP_IF_CAN_DEFAULT_NAME, 10, 125000, true, 0xFFFF, 0x0000, &fwd_iface);
+			if (error != CSP_ERR_NONE) {
+            	csp_print("failed to add CAN interface [%s], error: %d\n", "can0", error);
+            	exit(1);
+        	}
+        	fwd_iface->is_default = 1;
+			csp_rtable_set(11, 0, fwd_iface, 10);
+			csp_print("Connection table\r\n");
+			csp_conn_print_table();
+
+			csp_print("Interfaces\r\n");
+			csp_iflist_print();
+
+			if (CSP_USE_RTABLE) {
+				csp_print("Route table\r\n");
+				csp_rtable_print();
+			}
+			// csp_bridge_set_interfaces(default_iface, fwd_iface);
+			break;
 		default:
 			break;
 	}
@@ -323,10 +350,12 @@ void server(void)
 		/* Read packets on connection, timout is 100 mS */
 		csp_packet_t *packet;
 		while ((packet = csp_read(conn, 50)) != NULL) {
-			switch (csp_conn_dport(conn)) {
+			dp = csp_conn_dport(conn);
+			switch (dp) {
+			case SERVER_STATUS_PORT:	
 			case SERVER_PORT:
 				/* Process packet here */
-				csp_print("Packet received on SERVER_PORT: %s\n", (char *) packet->data);
+				csp_print("Packet received on SERVER_PORT (%d): %s\n", dp, (char *) packet->data);
 
 				/* parse CAN frame */
 				required_mtu = parse_canframe((char *) packet->data, &cu);
@@ -375,6 +404,21 @@ void server(void)
 						csp_print("Len: %d\n", cu.cc.len + 6);
 						sendto(sockfd, ccsds_buffer, cu.cc.len + 6, 0, (struct sockaddr*)&ccsds_addr, sizeof(ccsds_addr));
 
+						break;
+					case 3:
+						if(fwd_iface) {
+							// csp_print("Packet received on SERVER_PORT (%d): %s\n", SERVER_STATUS_PORT, (char *) packet->data);
+							// csp_bridge_work();
+							// csp_conn_t * fwd_conn = csp_connect(CSP_PRIO_NORM, server_address, SERVER_PORT, 1000, CSP_O_NONE);
+							// if (fwd_conn == NULL) {
+							// 	/* Connect failed */
+							// 	csp_print("FWD Connection failed\n");
+							// } else {
+							// 	csp_send(fwd_conn, packet);
+							// 	csp_close(fwd_conn);
+							// }
+							
+						}
 						break;
 					default:
 						break;
@@ -431,6 +475,7 @@ static struct option long_options[] = {
     {"test-mode", no_argument, 0, 't'},
     {"test-mode-with-sec", required_argument, 0, 'T'},
     {"help", no_argument, 0, 'h'},
+	{"verbose", no_argument, 0, 'v'},
     {0, 0, 0, 0}
 };
 
@@ -445,7 +490,7 @@ void print_help() {
 	}
 	if (CSP_HAVE_LIBZMQ) {
 		csp_print(" -z <zmq-device>  set ZeroMQ device\n");
-		csp_print(" -f <0|1|2>        ZeroMQ forwarding 0:disable 1:CAN raw 2: YAMCS CCSDS\n");
+		csp_print(" -f <0|1|2|3>        ZeroMQ forwarding 0:disable 1:CAN raw 2: YAMCS CCSDS 3: CAN bridge\n");
 	}
 	if (CSP_USE_RTABLE) {
 		csp_print(" -R <rtable>      set routing table\n");
@@ -454,14 +499,13 @@ void print_help() {
 		csp_print(" -a <address>     set interface address\n"
 				  " -t               enable test mode\n"
 				  " -T <dration>     enable test mode with running time in seconds\n"
-				  " -h               print help\n");
+				  " -h               print help\n"
+				  " -v               verbose\n");
 	}
 }
 
 csp_iface_t * add_interface(enum DeviceType device_type, const char * device_name)
 {
-    csp_iface_t * default_iface = NULL;
-
     if (device_type == DEVICE_KISS) {
         csp_usart_conf_t conf = {
 			.device = device_name,
@@ -505,11 +549,14 @@ int main(int argc, char * argv[]) {
 	const char * device_name = NULL;
 	enum DeviceType device_type = DEVICE_UNKNOWN;
 	const char * rtable __maybe_unused = NULL;
-	csp_iface_t * default_iface;
+	
     int opt;
 
-	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:a:tT:h:" , long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:a:tT:h:v" , long_options, NULL)) != -1) {
         switch (opt) {
+			case 'v':
+				csp_dbg_packet_print = true;
+				break;
             case 'c':
 				device_name = optarg;
 				device_type = DEVICE_CAN;
