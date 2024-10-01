@@ -26,10 +26,14 @@ int router_start(void);
 
 /* Server port, the port the server listens on for incoming connections from the client. */
 #define SERVER_PORT		10
+#define SERVER_TC_PORT		13
+#define SERVER_ACK_PORT		14
+#define SERVER_STATUS_PORT	15
 
 /* Commandline options */
 static uint8_t server_address = 0;
 static uint8_t client_address = 0;
+static uint8_t bridge_address = 10;
 
 /* Test mode, check that server & client can exchange packets */
 static bool test_mode = false;
@@ -60,7 +64,7 @@ enum DeviceType {
 static struct option long_options[] = {
 	{"kiss-device", required_argument, 0, 'k'},
 #if (CSP_HAVE_LIBSOCKETCAN)
-	#define OPTION_c "cb:"
+	#define OPTION_c "c:b:"
     {"can-device", required_argument, 0, 'c'},
 	{"can-bps", required_argument, 0, 'b'},
 #else
@@ -71,6 +75,8 @@ static struct option long_options[] = {
     {"zmq-device", required_argument, 0, 'z'},
 	#define OPTION_f "f:"
     {"can2zmq", required_argument, 0, 'f'},
+	#define OPTION_B "B:"
+    {"bridge", required_argument, 0, 'B'},
 #else
 	#define OPTION_z
 #endif
@@ -85,6 +91,7 @@ static struct option long_options[] = {
     {"test-mode", no_argument, 0, 't'},
     {"test-mode-with-sec", required_argument, 0, 'T'},
     {"help", no_argument, 0, 'h'},
+	{"verbose", no_argument, 0, 'v'},
     {0, 0, 0, 0}
 };
 
@@ -99,7 +106,7 @@ void print_help() {
 	}
 	if (CSP_HAVE_LIBZMQ) {
 		csp_print(" -z <zmq-device>  set ZeroMQ device\n");
-		csp_print(" -f <0|1|2>       0:disable forwarding 1:CAN 2:CCSDS to ZMQ\n");
+		csp_print(" -f <0|1|2|3>       0:disable forwarding 1:CAN-RAW 2:CCSDS to ZMQ 3: CAN-CSP\n");
 	}
 	if (CSP_USE_RTABLE) {
 		csp_print(" -R <rtable>      set routing table\n");
@@ -107,8 +114,10 @@ void print_help() {
 	if (1) {
 		csp_print(" -a <address>     set interface address\n"
 				  " -C <address>     connect to server at address\n"
+				  " -B <address>     bridge to server at address\n"
 				  " -t               enable test mode\n"
 				  " -T <duration>    enable test mode with running time in seconds\n"
+				  " -v               Verbose\n"
 				  " -h               print help\n");
 	}
 }
@@ -171,9 +180,12 @@ int main(int argc, char * argv[]) {
 	char frame_buff[32];
 	char buffer[4096];
 	size_t alen = 0;
+	csp_iface_t * bridge_iface;
+	// csp_socket_t bridge_sock = {0};
+	// csp_conn_t * bridge_conn;
 	// const uint32_t HEADER_SIZE = (csp_conf.version == 2) ? 6 : 4;
 
-	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:a:C:tT:h", long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_B OPTION_R "k:a:C:tT:hv", long_options, NULL)) != -1) {
         switch (opt) {
             case 'c':
 				device_name = optarg;
@@ -194,6 +206,10 @@ int main(int argc, char * argv[]) {
 				forwarding = atoi(optarg);
 				csp_print("Forwarding: %d\n",forwarding);
                 break;
+			case 'B':
+				bridge_address = atoi(optarg);
+				csp_print("Bridging: %d\n",bridge_address);
+                break;
 #if (CSP_USE_RTABLE)
             case 'R':
                 rtable = optarg;
@@ -212,6 +228,9 @@ int main(int argc, char * argv[]) {
                 test_mode = true;
                 run_duration_in_sec = atoi(optarg);
                 break;
+			case 'v':
+				csp_dbg_packet_print = true;
+				break;
             case 'h':
 				print_help();
 				exit(EXIT_SUCCESS);
@@ -265,12 +284,21 @@ int main(int argc, char * argv[]) {
 			ccsds_addr.sin_addr.s_addr = inet_addr(ip);
 			//#2 : binding the socket
 
- 			if(bind(sockfd, (struct sockaddr*)&ccsds_addr, sizeof(ccsds_addr))<0)
+			if(bind(sockfd, (struct sockaddr*)&ccsds_addr, sizeof(ccsds_addr))<0)
 			{
 				perror("UDP binding");
 				exit(EXIT_FAILURE);
 			}
 
+			break;
+		case 3:
+			int error = csp_can_socketcan_open_and_add_interface("can0", CSP_IF_CAN_DEFAULT_NAME, bridge_address, 125000, true, 0xFFFF, 0x0000, &bridge_iface);
+			if (error != CSP_ERR_NONE) {
+				csp_print("failed to add CAN interface [%s], error: %d\n", "can0", error);
+				exit(1);
+			}
+			// bridge_iface->is_default = 1;
+			csp_rtable_set(client_address, 0, bridge_iface, bridge_address);
 			break;
 		default:
 			break;
@@ -286,6 +314,8 @@ int main(int argc, char * argv[]) {
 
     /* Add interface(s) */
 	default_iface = add_interface(device_type, device_name);
+
+	// csp_bridge_set_interfaces(bridge_iface , default_iface);
 
 	/* Setup routing table */
 	if (CSP_USE_RTABLE) {
@@ -321,17 +351,21 @@ int main(int argc, char * argv[]) {
 
 		usleep(test_mode ? 200000 : 1000000);
 
-		/* Send ping to server, timeout 1000 mS, ping size 100 bytes */
-		int result = csp_ping(server_address, 1000, 100, CSP_O_NONE);
+		/* Send ping to server, timeout 1000 mS, ping size 10 bytes */
+		int result = csp_ping(server_address, 1000, 10, CSP_O_NONE);
 		csp_print("Ping address: %u, result %d [mS]\n", server_address, result);
         // Increment successful_ping if ping was successful
         if (result >= 0) {
             ++successful_ping;
-        }
+        } 
+		else 
+		{
+			continue;
+		}
 
 		/* Send reboot request to server, the server has no actual implementation of csp_sys_reboot() and fails to reboot */
-		csp_reboot(server_address);
-		csp_print("reboot system request sent to address: %u\n", server_address);
+		// csp_reboot(server_address);
+		// csp_print("reboot system request sent to address: %u\n", server_address);
 
 		/* Send data packet (string) to server */
 
@@ -381,6 +415,10 @@ int main(int argc, char * argv[]) {
 					csp_print("%02X ", (uint8_t)buffer[i]);
 					alen += sprintf(frame_buff + alen, "%02X", (uint8_t) buffer[i]);
 				}
+				break;
+			case 3:
+				csp_bridge_work();
+				
 				break;
 			default:
 				alen = sprintf(frame_buff, "%03X#", 0x200 & 0xfff);
