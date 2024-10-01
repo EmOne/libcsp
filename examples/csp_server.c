@@ -42,6 +42,7 @@ int parse_canframe(char *cs, cu_t *cu);
 
 /* Commandline options */
 static uint8_t server_address = 0;
+static uint8_t bridge_address = 10;
 
 /* Test mode, check that server & client can exchange packets */
 static bool test_mode = false;
@@ -67,6 +68,7 @@ enum DeviceType {
 };
 
 static csp_iface_t * default_iface;
+static csp_iface_t * bridge_iface;
 
 #define __maybe_unused __attribute__((__unused__))
 
@@ -265,7 +267,7 @@ void server(void)
 	// };
 	static cu_t cu;
 	struct ifreq ifr;
-	csp_iface_t * fwd_iface;
+	
 	int dp;
 
 	csp_print("Server task started\n");
@@ -314,13 +316,13 @@ void server(void)
 
 			break;
 		case 3: // CAN bridge
-			int error = csp_can_socketcan_open_and_add_interface("can0", CSP_IF_CAN_DEFAULT_NAME, 10, 125000, true, 0xFFFF, 0x0000, &fwd_iface);
+			int error = csp_can_socketcan_open_and_add_interface("can0", CSP_IF_CAN_DEFAULT_NAME, bridge_address, 125000, true, 0xFFFF, 0x0000, &bridge_iface);
 			if (error != CSP_ERR_NONE) {
             	csp_print("failed to add CAN interface [%s], error: %d\n", "can0", error);
             	exit(1);
         	}
-        	fwd_iface->is_default = 1;
-			csp_rtable_set(11, 0, fwd_iface, 10);
+        	bridge_iface->is_default = 0;
+			csp_rtable_set(bridge_address, 0, bridge_iface, server_address);
 			csp_print("Connection table\r\n");
 			csp_conn_print_table();
 
@@ -331,7 +333,7 @@ void server(void)
 				csp_print("Route table\r\n");
 				csp_rtable_print();
 			}
-			// csp_bridge_set_interfaces(default_iface, fwd_iface);
+			csp_bridge_set_interfaces(default_iface, bridge_iface);
 			break;
 		default:
 			break;
@@ -352,7 +354,7 @@ void server(void)
 		while ((packet = csp_read(conn, 50)) != NULL) {
 			dp = csp_conn_dport(conn);
 			switch (dp) {
-			case SERVER_STATUS_PORT:	
+			case SERVER_TC_PORT:	
 			case SERVER_PORT:
 				/* Process packet here */
 				csp_print("Packet received on SERVER_PORT (%d): %s\n", dp, (char *) packet->data);
@@ -406,18 +408,17 @@ void server(void)
 
 						break;
 					case 3:
-						if(fwd_iface) {
-							// csp_print("Packet received on SERVER_PORT (%d): %s\n", SERVER_STATUS_PORT, (char *) packet->data);
+						if(bridge_iface) {
+							csp_print("Packet forward on SERVER_PORT (%d): %s\n", SERVER_TC_PORT, (char *) packet->data);
 							// csp_bridge_work();
-							// csp_conn_t * fwd_conn = csp_connect(CSP_PRIO_NORM, server_address, SERVER_PORT, 1000, CSP_O_NONE);
-							// if (fwd_conn == NULL) {
-							// 	/* Connect failed */
-							// 	csp_print("FWD Connection failed\n");
-							// } else {
-							// 	csp_send(fwd_conn, packet);
-							// 	csp_close(fwd_conn);
-							// }
-							
+							csp_conn_t * fwd_conn = csp_connect(CSP_PRIO_NORM, 11, SERVER_TC_PORT, 50, CSP_O_NONE);
+							if (fwd_conn == NULL) {
+								/* Connect failed */
+								csp_print("FWD Connection failed\n");
+							} else {
+								csp_send(fwd_conn, packet);
+								csp_close(fwd_conn);
+							}
 						}
 						break;
 					default:
@@ -460,6 +461,8 @@ static struct option long_options[] = {
     {"zmq-device", required_argument, 0, 'z'},
 	#define OPTION_f "f:"
 	{"zmq2can", required_argument, 0, 'f'},
+	#define OPTION_B "B:"
+	{"zmq2can-csp", required_argument, 0, 'B'},
 #else
 	#define OPTION_z
 	#define OPTION_f
@@ -490,7 +493,8 @@ void print_help() {
 	}
 	if (CSP_HAVE_LIBZMQ) {
 		csp_print(" -z <zmq-device>  set ZeroMQ device\n");
-		csp_print(" -f <0|1|2|3>        ZeroMQ forwarding 0:disable 1:CAN raw 2: YAMCS CCSDS 3: CAN bridge\n");
+		csp_print(" -f <0|1|2|3>        ZeroMQ forwarding 0:disable 1:CAN raw 2: YAMCS CCSDS 3: CAN bridge addr 10\n");
+		csp_print(" -B <CAN-CSP Bridge Address>        CAN CSP Bridge addr\n");
 	}
 	if (CSP_USE_RTABLE) {
 		csp_print(" -R <rtable>      set routing table\n");
@@ -552,7 +556,7 @@ int main(int argc, char * argv[]) {
 	
     int opt;
 
-	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:a:tT:h:v" , long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R OPTION_B "k:a:tT:hv" , long_options, NULL)) != -1) {
         switch (opt) {
 			case 'v':
 				csp_dbg_packet_print = true;
@@ -576,6 +580,10 @@ int main(int argc, char * argv[]) {
 				forwarding = atoi(optarg);
 				csp_print("Forwarding: %d\n",forwarding);
                 break;
+			case 'B':
+				bridge_address = atoi(optarg);
+				csp_print("Forwarding bridge address: %d\n",bridge_address);
+				break;
 #if (CSP_USE_RTABLE)
             case 'R':
                 rtable = optarg;
