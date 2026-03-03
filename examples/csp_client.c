@@ -197,7 +197,7 @@ int main(int argc, char * argv[]) {
 	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:u:a:C:v:tT:h", long_options, NULL)) != -1) {
         switch (opt) {
             case 'c':
-				device_name = optarg;
+				device_name = optarg ? optarg : "vcan0";
 				device_type = DEVICE_CAN;
                 break;
             case 'b':
