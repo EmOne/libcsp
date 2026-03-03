@@ -20,7 +20,9 @@
 #include <csp/drivers/usart.h>
 #include <csp/drivers/can_socketcan.h>
 #include <csp/interfaces/csp_if_zmqhub.h>
+#include <csp/interfaces/csp_if_udp.h>
 
+#include "csp_posix_helper.h"
 /* CAN CC/FD/XL frame union */
 typedef union {
 	struct can_frame cc;
@@ -35,7 +37,9 @@ int server_start(void);
 int parse_canframe(char *cs, cu_t *cu);
 
 /* Server port, the port the server listens on for incoming connections from the client. */
-#define SERVER_PORT		10
+#define SERVER_PORT             10
+#define DEFAULT_UDP_REMOTE_PORT (1500)
+#define DEFAULT_UDP_LOCAL_PORT  (1501)
 
 /* Commandline options */
 static uint8_t server_address = 0;
@@ -61,6 +65,7 @@ enum DeviceType {
 	DEVICE_CAN,
 	DEVICE_KISS,
 	DEVICE_ZMQ,
+	DEVICE_UDP,
 };
 
 #define __maybe_unused __attribute__((__unused__))
@@ -247,6 +252,9 @@ int parse_canframe(char *cs, cu_t *cu)
 }
 
 /* Server task - handles requests from clients */
+static void * server(void * param) {
+
+	(void)param;
 void server(void)
 {
 	uint32_t tmp = 0;
@@ -320,7 +328,7 @@ void server(void)
 			continue;
 		}
 
-		/* Read packets on connection, timout is 100 mS */
+		/* Read packets on connection, timeout is 50 mS */
 		csp_packet_t *packet;
 		while ((packet = csp_read(conn, 50)) != NULL) {
 			switch (csp_conn_dport(conn)) {
@@ -396,7 +404,7 @@ void server(void)
 		csp_close(conn);
 	}
 
-	return;
+	return NULL;
 }
 /* End of server task */
 
@@ -426,15 +434,17 @@ static struct option long_options[] = {
 #else
 	#define OPTION_R
 #endif
+	{"udp-address", required_argument, 0, 'u'},
     {"interface-address", required_argument, 0, 'a'},
     {"connect-to", required_argument, 0, 'C'},
+	{"protocol-version", required_argument, 0, 'v'},
     {"test-mode", no_argument, 0, 't'},
     {"test-mode-with-sec", required_argument, 0, 'T'},
     {"help", no_argument, 0, 'h'},
     {0, 0, 0, 0}
 };
 
-void print_help() {
+static void print_help(void) {
     csp_print("Usage: csp_server [options]\n");
 	if (CSP_HAVE_LIBSOCKETCAN) {
 		csp_print(" -c <can-device>  set CAN device receiver\n");
@@ -450,15 +460,17 @@ void print_help() {
 	if (CSP_USE_RTABLE) {
 		csp_print(" -R <rtable>      set routing table\n");
 	}
+	csp_print(" -u <udp-address>  set UDP address\n");
 	if (1) {
 		csp_print(" -a <address>     set interface address\n"
+				  " -v <version>     set protocol version\n"
 				  " -t               enable test mode\n"
 				  " -T <dration>     enable test mode with running time in seconds\n"
 				  " -h               print help\n");
 	}
 }
 
-csp_iface_t * add_interface(enum DeviceType device_type, const char * device_name)
+static csp_iface_t * add_interface(enum DeviceType device_type, const char * device_name)
 {
     csp_iface_t * default_iface = NULL;
 
@@ -496,6 +508,19 @@ csp_iface_t * add_interface(enum DeviceType device_type, const char * device_nam
         default_iface->is_default = 1;
     }
 
+	if (device_type == DEVICE_UDP) {
+		default_iface = malloc(sizeof(csp_iface_t));
+		static csp_if_udp_conf_t udp_conf;
+
+		udp_conf.host = strdup(device_name);
+		udp_conf.lport = DEFAULT_UDP_LOCAL_PORT;
+		udp_conf.rport = DEFAULT_UDP_REMOTE_PORT;
+
+		csp_if_udp_init(default_iface, &udp_conf);
+		default_iface->addr = server_address;
+		default_iface->is_default = 1;
+	}
+
 	return default_iface;
 }
 
@@ -508,6 +533,7 @@ int main(int argc, char * argv[]) {
 	csp_iface_t * default_iface;
     int opt;
 
+	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_R "k:u:a:v:tT:h", long_options, NULL)) != -1) {
 	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:a:tT:h:" , long_options, NULL)) != -1) {
         switch (opt) {
             case 'c':
@@ -524,6 +550,11 @@ int main(int argc, char * argv[]) {
             case 'z':
 				device_name = optarg;
 				device_type = DEVICE_ZMQ;
+				break;
+			case 'u':
+				device_name = optarg;
+				device_type = DEVICE_UDP;
+				break;
                 break;
 			case 'f':
 				forwarding = atoi(optarg);
@@ -537,6 +568,9 @@ int main(int argc, char * argv[]) {
             case 'a':
                 server_address = atoi(optarg);
                 break;
+			case 'v':
+				csp_conf.version = atoi(optarg);
+				break;
             case 't':
                 test_mode = true;
                 break;
@@ -597,7 +631,7 @@ int main(int argc, char * argv[]) {
 	}
 
     /* Start server thread */
-    server_start();
+    csp_pthread_create(server);
 
     /* Wait for execution to end (ctrl+c) */
     while(1) {

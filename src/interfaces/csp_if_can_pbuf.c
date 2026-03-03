@@ -7,6 +7,8 @@
 #include <csp/arch/csp_time.h>
 #include <csp/interfaces/csp_if_can.h>
 
+#include "../csp_buffer_private.h"
+
 /* Buffer element timeout in ms */
 #define PBUF_TIMEOUT_MS 1000
 
@@ -49,10 +51,7 @@ csp_packet_t * csp_can_pbuf_new(csp_can_interface_data_t * ifdata, uint32_t id, 
 
 	uint32_t now = (task_woken) ? csp_get_ms_isr() : csp_get_ms();
 
-	csp_packet_t * packet = (task_woken) ? csp_buffer_get_isr(0) : csp_buffer_get(0);
-	if (packet == NULL) {
-		return NULL;
-	}
+	csp_packet_t * packet = (task_woken) ? csp_buffer_get_always_isr() : csp_buffer_get_always();
 
 	packet->last_used = now;
 	packet->cfpid = id;

@@ -48,6 +48,10 @@ version is for task-context and
 interrupt-context. Using fixed size buffer elements that are
 preallocated is again a question of speed and safety.
 
+if you use `csp_buffer_get_always()` instead csp will panic if there is
+not enough available buffers. This ensures that incoming hardware
+always gets a buffer, or the system will reboot.
+
 Definition of a buffer element `csp_packet_t`:
 
 ```c
@@ -62,7 +66,6 @@ Definition of a buffer element `csp_packet_t`:
    the CSP id to different endian (e.g. I2C), etc.
 */
 typedef struct {
-    uint32_t rdp_quarantine;      // EACK quarantine period
     uint32_t timestamp_tx;        // Time the message was sent
     uint32_t timestamp_rx;        // Time the message was received
 
@@ -73,7 +76,7 @@ typedef struct {
     uint16_t frame_length;
 
     /* Additional header bytes, to prepend packed data before transmission
-     * This must be minimum 6 bytes to accomodate CSP 2.0. But some implementations
+     * This must be minimum 6 bytes to accommodate CSP 2.0. But some implementations
      * require much more scratch working area for encryption for example.
      *
      * Ultimately after csp_id_pack() this area will be filled with the CSP header
@@ -222,7 +225,7 @@ time).
 >     `static` routing table has the
 >     fastest lookup, but requires more setup.
 >   - cidr (Classless Inter-Domain Routing): supports a one-to-many
->     mapping, meaning routes can be configued for a range of
+>     mapping, meaning routes can be configured for a range of
 >     destination addresses. The `cidr` is
 >     a bit slower for lookup, but simple to setup.
 

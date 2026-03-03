@@ -11,11 +11,12 @@ static char csp_promisc_queue_buffer[sizeof(csp_packet_t *) * CSP_CONN_RXQUEUE_L
 static int csp_promisc_enabled = 0;
 
 int csp_promisc_enable(unsigned int queue_size) {
+	(void)queue_size; /* Avoid compiler warnings about unused parameter */
 
 	/* If queue already initialised */
 	if (csp_promisc_queue != NULL) {
 		csp_promisc_enabled = 1;
-		return CSP_ERR_NONE;
+		return CSP_ERR_USED;
 	}
 
 	/* Create packet queue */
