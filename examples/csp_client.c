@@ -9,7 +9,9 @@
 #include <csp/drivers/usart.h>
 #include <csp/drivers/can_socketcan.h>
 #include <csp/interfaces/csp_if_zmqhub.h>
+#include <csp/interfaces/csp_if_udp.h>
 
+#include "csp_posix_helper.h"
 #include <stdio.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
@@ -25,7 +27,9 @@
 int router_start(void);
 
 /* Server port, the port the server listens on for incoming connections from the client. */
-#define SERVER_PORT		10
+#define SERVER_PORT             10
+#define DEFAULT_UDP_REMOTE_PORT (1501)
+#define DEFAULT_UDP_LOCAL_PORT  (1500)
 
 /* Commandline options */
 static uint8_t server_address = 0;
@@ -53,6 +57,7 @@ enum DeviceType {
 	DEVICE_CAN,
 	DEVICE_KISS,
 	DEVICE_ZMQ,
+	DEVICE_UDP,
 };
 
 #define __maybe_unused __attribute__((__unused__))
@@ -73,6 +78,7 @@ static struct option long_options[] = {
     {"can2zmq", required_argument, 0, 'f'},
 #else
 	#define OPTION_z
+	#define OPTION_f
 #endif
 #if (CSP_USE_RTABLE)
 	#define OPTION_R "R:"
@@ -80,15 +86,17 @@ static struct option long_options[] = {
 #else
 	#define OPTION_R
 #endif
+	{"udp-address", required_argument, 0, 'u'},
     {"interface-address", required_argument, 0, 'a'},
     {"connect-to", required_argument, 0, 'C'},
+    {"protocol-version", required_argument, 0, 'v'},
     {"test-mode", no_argument, 0, 't'},
     {"test-mode-with-sec", required_argument, 0, 'T'},
     {"help", no_argument, 0, 'h'},
     {0, 0, 0, 0}
 };
 
-void print_help() {
+static void print_help(void) {
 	csp_print("Usage: csp_client [options]\n");
 	if (CSP_HAVE_LIBSOCKETCAN) {
 		csp_print(" -c <can-device>  set CAN device\n");
@@ -104,16 +112,18 @@ void print_help() {
 	if (CSP_USE_RTABLE) {
 		csp_print(" -R <rtable>      set routing table\n");
 	}
+	csp_print(" -u <udp-address>  set UDP address\n");
 	if (1) {
 		csp_print(" -a <address>     set interface address\n"
 				  " -C <address>     connect to server at address\n"
+				  " -v <version>     set protocol version\n"
 				  " -t               enable test mode\n"
 				  " -T <duration>    enable test mode with running time in seconds\n"
 				  " -h               print help\n");
 	}
 }
 
-csp_iface_t * add_interface(enum DeviceType device_type, const char * device_name)
+static csp_iface_t * add_interface(enum DeviceType device_type, const char * device_name)
 {
     csp_iface_t * default_iface = NULL;
 
@@ -151,6 +161,19 @@ csp_iface_t * add_interface(enum DeviceType device_type, const char * device_nam
         default_iface->is_default = 1;
     }
 
+	if (device_type == DEVICE_UDP) {
+		default_iface = malloc(sizeof(csp_iface_t));
+		static csp_if_udp_conf_t udp_conf;
+
+		udp_conf.host = strdup(device_name);
+		udp_conf.lport = DEFAULT_UDP_LOCAL_PORT;
+		udp_conf.rport = DEFAULT_UDP_REMOTE_PORT;
+
+		csp_if_udp_init(default_iface, &udp_conf);
+		default_iface->addr = client_address;
+		default_iface->is_default = 1;
+	}
+
 	return default_iface;
 }
 
@@ -165,15 +188,13 @@ int main(int argc, char * argv[]) {
 	unsigned int count;
 	int ret = EXIT_SUCCESS;
     int opt;
-
 	int s = 0, i;
 	int nbytes;
 	char frame_buff[32];
 	char buffer[4096];
 	size_t alen = 0;
 	// const uint32_t HEADER_SIZE = (csp_conf.version == 2) ? 6 : 4;
-
-	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:a:C:tT:h", long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, OPTION_c OPTION_z OPTION_f OPTION_R "k:u:a:C:v:tT:h", long_options, NULL)) != -1) {
         switch (opt) {
             case 'c':
 				device_name = optarg;
@@ -189,6 +210,11 @@ int main(int argc, char * argv[]) {
             case 'z':
 				device_name = optarg;
 				device_type = DEVICE_ZMQ;
+				break;
+			case 'u':
+				device_name = optarg;
+				device_type = DEVICE_UDP;
+				break;
                 break;
             case 'f':
 				forwarding = atoi(optarg);
@@ -205,6 +231,9 @@ int main(int argc, char * argv[]) {
             case 'C':
                 server_address = atoi(optarg);
                 break;
+			case 'v':
+				csp_conf.version = atoi(optarg);
+				break;
             case 't':
                 test_mode = true;
                 break;

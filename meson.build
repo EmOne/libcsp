@@ -1,7 +1,7 @@
-project('csp', 'c', version: '2.1', license: 'LGPL', meson_version : '>=0.53.2', default_options : [
+project('csp', 'c', version: '2.2', license: 'LGPL', meson_version : '>=0.61.2', default_options : [
 	'c_std=gnu11',
 	'optimization=s',
-	'warning_level=2',
+	'warning_level=3',
 	'werror=true'])
 
 cc = meson.get_compiler('c')
@@ -14,6 +14,7 @@ conf.set('CSP_CONN_RXQUEUE_LEN', get_option('conn_rxqueue_len'))
 conf.set('CSP_CONN_MAX', get_option('conn_max'))
 conf.set('CSP_BUFFER_SIZE', get_option('buffer_size'))
 conf.set('CSP_BUFFER_COUNT', get_option('buffer_count'))
+conf.set('CSP_PACKET_PADDING_BYTES', get_option('packet_padding_bytes'))
 conf.set('CSP_RDP_MAX_WINDOW', get_option('rdp_max_window'))
 conf.set('CSP_RTABLE_SIZE', get_option('rtable_size'))
 
@@ -26,6 +27,11 @@ conf.set10('CSP_HAVE_STDIO', get_option('have_stdio'))
 conf.set10('CSP_ENABLE_CSP_PRINT', get_option('enable_csp_print'))
 conf.set10('CSP_PRINT_STDIO', get_option('print_stdio'))
 conf.set10('CSP_USE_RTABLE', get_option('use_rtable'))
+conf.set10('CSP_BUFFER_ZERO_CLEAR', get_option('buffer_zero_clear'))
+
+conf.set10('CSP_FIXUP_V1_ZMQ_LITTLE_ENDIAN', get_option('fixup_v1_zmq_little_endian'))
+
+conf.set10('CSP_ENABLE_KISS_CRC', get_option('enable_kiss_crc'))
 
 csp_deps = []
 csp_sources = []
@@ -59,18 +65,23 @@ csp_deps += clib
 csp_inc = include_directories('include', 'src')
 
 # Default compile options
-csp_c_args = ['-Wshadow',
-	      '-Wcast-align',
-	      '-Wwrite-strings',
-	      '-Wpointer-arith',
-	      '-Wno-unused-parameter']
+csp_c_args = ['-Wall',
+	'-Wcast-align',
+	'-Wextra',
+	'-Wmissing-prototypes',
+	'-Wpedantic',
+	'-Wpointer-arith',
+	'-Wshadow',
+	'-Wwrite-strings']
+if cc.get_id() == 'clang'
+	csp_c_args += '-Wno-gnu-zero-variadic-macro-arguments'
+endif
 
 subdir('src')
 subdir('include/csp')
 
 if not meson.is_subproject()
-  install_subdir('include', install_dir : '.')
-  install_headers(csp_config_h, install_dir : 'include/csp')
+	install_subdir('include', install_dir : '', exclude_files : ['csp/meson.build'])
 endif
 
 
@@ -79,7 +90,7 @@ csp_lib = library('csp',
 	include_directories : csp_inc,
 	dependencies : csp_deps,
 	c_args : csp_c_args,
-	install : false,
+	install : true,
 	pic:true,
 )
 
@@ -101,7 +112,9 @@ if get_option('enable_python3_bindings')
 	# dependency() instead
 	pydep = dependency('python3', version : '>=3.5', required : true)
 	py.extension_module('libcsp_py3', 'src/bindings/python/pycsp.c',
-                    	c_args : csp_c_args,
+						c_args : [csp_c_args,
+							'-Wno-missing-prototypes',
+							'-Wno-unused-parameter'],
                     	dependencies : [csp_dep, pydep],
                     	install : true)
 endif

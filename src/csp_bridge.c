@@ -1,5 +1,6 @@
 #include "csp_macro.h"
 
+#include "csp/csp_hooks.h"
 #include "csp_qfifo.h"
 #include "csp_io.h"
 #include "csp_promisc.h"
@@ -29,10 +30,9 @@ void csp_bridge_work(void) {
 		return;
 	}
 
-	/* Get next packet to route */
+	/* Get next packet to bridge */
 	csp_qfifo_t input;
 	if (csp_qfifo_read(&input) != CSP_ERR_NONE) {
-		csp_print("Failed to receive packet from router input queue\n");
 		return;
 	}
 

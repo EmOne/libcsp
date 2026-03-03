@@ -16,7 +16,7 @@
 #pragma once
 
 #include "csp/autoconfig.h"
-#include <inttypes.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,7 +62,7 @@ extern uint8_t csp_dbg_eth_errno;
 #define CSP_DBG_ETH_ERR_INCOMPLETE 5
 #define CSP_DBG_ETH_ERR_UNKNOWN 6
 
-/* Toogle flags for rdp and packet print */
+/* Toggle flags for rdp and packet print */
 extern uint8_t csp_dbg_rdp_print;
 extern uint8_t csp_dbg_packet_print;
 

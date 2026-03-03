@@ -3,6 +3,7 @@
 #include "csp_conn.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <stdatomic.h>
 
 #include <csp/arch/csp_queue.h>
@@ -20,6 +21,9 @@
 
 /* Connection pool */
 static csp_conn_t arr_conn[CSP_CONN_MAX] __noinit;
+
+/* Used by csp_conn_allocate */
+static uint8_t csp_conn_last_given = 0;
 
 void csp_conn_check_timeouts(void) {
 #if (CSP_USE_RDP)
@@ -106,7 +110,7 @@ csp_conn_t * csp_conn_find_existing(csp_id_t * id) {
 		/* Outgoing connections are uniquely defined by the source port,
 		 * So only the incoming destination port must match. This means
 		 * that responses to broadcast addresses, are accepted as long
-		 * as the incoming port matches the unique source port of the 
+		 * as the incoming port matches the unique source port of the
 		 * connection */
 		if (conn->type == CONN_CLIENT) {
 
@@ -114,11 +118,11 @@ csp_conn_t * csp_conn_find_existing(csp_id_t * id) {
 			if (conn->idin.dport != id->dport)
 				continue;
 
-		/* Incoming connections are uniquely defined by the source amd
+		/* Incoming connections are uniquely defined by the source and
 		 * destination port, as well as the source node. Incoming
-		 * connections can never come from a brodcast address */
+		 * connections can never come from a broadcast address */
 		} else {
-      
+
 			/* Connection must match dport */
 			if (conn->idin.dport != id->dport)
 				continue;
@@ -133,7 +137,7 @@ csp_conn_t * csp_conn_find_existing(csp_id_t * id) {
 
 		}
 
-		
+
 
 		/* All conditions found! */
 		return conn;
@@ -157,8 +161,6 @@ static int csp_conn_flush_rx_queue(csp_conn_t * conn) {
 }
 
 csp_conn_t * csp_conn_allocate(csp_conn_type_t type) {
-
-	static uint8_t csp_conn_last_given = 0;
 
 	/* Search for free connection */
 	csp_conn_t * conn = NULL;
@@ -211,6 +213,7 @@ int csp_close(csp_conn_t * conn) {
 }
 
 int csp_conn_close(csp_conn_t * conn, uint8_t closed_by) {
+	(void)closed_by; /* Avoid compiler warnings about unused parameter */
 
 	if (conn == NULL) {
 		return CSP_ERR_NONE;
@@ -242,25 +245,26 @@ int csp_conn_close(csp_conn_t * conn, uint8_t closed_by) {
 
 	/* Set to closed */
 	conn->state = CONN_CLOSED;
-	
+
 	return CSP_ERR_NONE;
 }
 
 csp_conn_t * csp_connect(uint8_t prio, uint16_t dest, uint8_t dport, uint32_t timeout, uint32_t opts) {
+	(void)timeout; /* Avoid compiler warnings about unused parameter */
 
 	/* Force options on all connections */
 	opts |= csp_conf.conn_dfl_so;
-	
+
 	/* Generate identifier */
-	csp_id_t incoming_id, outgoing_id;
+	csp_id_t incoming_id = {0}, outgoing_id = {0};
 
 	/* Use 0 as incoming id (this disables the input filter on destination node)
 	 * This means that for this outgoing connection, we accept the answer coming to whatever address
-	 * the outgoing interface has. CSP does not support "source address" on outgoing connections 
-	 * so the outgoing source address will be automatically applied after outgoing routing 
-	 * selects which interface the packet will leavve from */
-	incoming_id.dst = 0; 
-	outgoing_id.src = 0; 
+	 * the outgoing interface has. CSP does not support "source address" on outgoing connections
+	 * so the outgoing source address will be automatically applied after outgoing routing
+	 * selects which interface the packet will leave from */
+	incoming_id.dst = 0;
+	outgoing_id.src = 0;
 
 	incoming_id.pri = prio;
 	outgoing_id.pri = prio;
@@ -331,27 +335,27 @@ csp_conn_t * csp_connect(uint8_t prio, uint16_t dest, uint8_t dport, uint32_t ti
 	return conn;
 }
 
-int csp_conn_dport(csp_conn_t * conn) {
+int csp_conn_dport(const csp_conn_t * conn) {
 
 	return conn->idin.dport;
 }
 
-int csp_conn_sport(csp_conn_t * conn) {
+int csp_conn_sport(const csp_conn_t * conn) {
 
 	return conn->idin.sport;
 }
 
-int csp_conn_dst(csp_conn_t * conn) {
+int csp_conn_dst(const csp_conn_t * conn) {
 
 	return conn->idin.dst;
 }
 
-int csp_conn_src(csp_conn_t * conn) {
+int csp_conn_src(const csp_conn_t * conn) {
 
 	return conn->idin.src;
 }
 
-int csp_conn_flags(csp_conn_t * conn) {
+int csp_conn_flags(const csp_conn_t * conn) {
 
 	return conn->idin.flags;
 }
@@ -367,7 +371,7 @@ void csp_conn_print_table(void) {
 		          conn->idin.dport, conn->idin.sport, conn->sport_outgoing, conn->idin.flags);
 #if (CSP_USE_RDP)
 		if (conn->idin.flags & CSP_FRDP) {
-			csp_print("\tRDP: S:%d (closed by 0x%x), rcv %u, snd %u, win %" PRIu32 "\n", 
+			csp_print("\tRDP: S:%d (closed by 0x%x), rcv %u, snd %u, win %" PRIu32 "\n",
 			          conn->rdp.state, conn->rdp.closed_by, conn->rdp.rcv_cur, conn->rdp.snd_una, conn->rdp.window_size);
 		}
 #endif
@@ -405,4 +409,18 @@ int csp_conn_print_table_str(char * str_buf, int str_size) {
 const csp_conn_t * csp_conn_get_array(size_t * size) {
         *size = CSP_CONN_MAX;
         return arr_conn;
+}
+
+bool csp_conn_is_active(csp_conn_t *conn) {
+	(void)conn; /* Avoid compiler warnings about unused parameter */
+
+#if (CSP_USE_RDP)
+	if ((conn->idin.flags & CSP_FRDP) || (conn->idout.flags & CSP_FRDP)) {
+		/* This is for sure an RDP connection */
+		return csp_rdp_conn_is_active(conn);
+	}
+#endif
+
+	/* Non RDP connections are always "active" */
+	return true;
 }

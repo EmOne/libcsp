@@ -4,20 +4,22 @@
 #include <csp/csp_id.h>
 
 #include <string.h>
+#include <inttypes.h>
 
 #include "csp/autoconfig.h"
 #include <csp/csp_debug.h>
 #include <csp/interfaces/csp_if_lo.h>
 
-/* Interfaces are stored in a linked list */
+/* Interfaces and alias receive addresses are stored in linked lists */
 static csp_iface_t * interfaces = NULL;
+static csp_alias_t * aliass = NULL;
 
 int csp_iflist_is_within_subnet(uint16_t addr, csp_iface_t * ifc) {
 
 	if (ifc == NULL) {
 		return 0;
 	}
-	
+
 	uint16_t netmask = ((1 << ifc->netmask) - 1) << (csp_id_get_host_bits() - ifc->netmask);
 	uint16_t network_a = ifc->addr & netmask;
 	uint16_t network_b = addr & netmask;
@@ -43,7 +45,7 @@ csp_iface_t * csp_iflist_get_by_subnet(uint16_t addr, csp_iface_t * ifc) {
 
 	while (ifc) {
 
-		/* Reject searches involving subnets, if the netmask is invalud */
+		/* Reject searches involving subnets, if the netmask is invalid */
 		if (ifc->netmask == 0) {
 			ifc = ifc->next;
 			continue;
@@ -78,7 +80,6 @@ csp_iface_t * csp_iflist_get_by_isdfl(csp_iface_t * ifc) {
 		}
 
 		ifc = ifc->next;
-		continue;
 
 	}
 
@@ -99,6 +100,49 @@ csp_iface_t * csp_iflist_iterate(csp_iface_t * ifc) {
 
 	return ifc;
 
+}
+
+int csp_alias_add(csp_alias_t * addr) {
+
+	if (addr == NULL || addr->iface == NULL) {
+		return -1;
+	}
+
+	/* Register interface for L2 filtering, if interface supports */
+	if (addr->iface->add_alias) {
+		int result = addr->iface->add_alias(addr->iface->driver_data, addr->addr);
+		if (result < 0) {
+			return result;
+		}
+	}
+
+	/* Add to list */
+	addr->next = aliass;
+	aliass = addr;
+
+	return 0;
+}
+
+static csp_alias_t * csp_alias_iterate(csp_alias_t * addr) {
+
+	if (addr == NULL) {
+		addr = aliass;
+	} else {
+		addr = addr->next;
+	}
+
+	return addr;
+}
+
+int csp_addr_is_alias(uint16_t addr) {
+
+	csp_alias_t * alias = NULL;
+	while ((alias = csp_alias_iterate(alias)) != NULL) {
+		if (addr == alias->addr) {
+			return 1;
+		}
+	}
+	return 0;
 }
 
 void csp_iflist_check_dfl(void) {
@@ -133,6 +177,18 @@ csp_iface_t * csp_iflist_get_by_addr(uint16_t addr) {
 
 }
 
+csp_iface_t * csp_iflist_get_by_broadcast(uint16_t addr) {
+
+	csp_iface_t * ifc = interfaces;
+	while (ifc) {
+		if (csp_id_is_broadcast(addr, ifc)) {
+			return ifc;
+		}
+		ifc = ifc->next;
+	}
+	return NULL;
+}
+
 csp_iface_t * csp_iflist_get_by_name(const char * name) {
 	csp_iface_t * ifc = interfaces;
 	while (ifc) {
@@ -152,7 +208,11 @@ csp_iface_t * csp_iflist_get_by_index(int idx) {
 	return ifc;
 }
 
-int csp_iflist_add(csp_iface_t * ifc) {
+void csp_iflist_add(csp_iface_t * ifc) {
+
+	if ((ifc == NULL) || (ifc->name == NULL)) {
+		return;
+	}
 
 	ifc->next = NULL;
 
@@ -165,7 +225,7 @@ int csp_iflist_add(csp_iface_t * ifc) {
 		csp_iface_t * last = NULL;
 		for (csp_iface_t * i = interfaces; i != NULL; i = i->next) {
 			if ((i == ifc) || (strncmp(ifc->name, i->name, CSP_IFLIST_NAME_MAX) == 0)) {
-				return CSP_ERR_ALREADY;
+				return;
 			}
 			last = i;
 		}
@@ -173,10 +233,10 @@ int csp_iflist_add(csp_iface_t * ifc) {
 		last->next = ifc;
 	}
 
-	return CSP_ERR_NONE;
 }
 
 void csp_iflist_remove(csp_iface_t * ifc) {
+
 	if (ifc == NULL) {
 		return;
 	}

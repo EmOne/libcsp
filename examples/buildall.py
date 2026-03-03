@@ -12,8 +12,10 @@ def build_with_meson():
     targets = ['examples/csp_server_client',
                'examples/csp_server',
                'examples/csp_client',
+               'examples/csp_bridge_can2udp',
                'examples/csp_arch',
-               'examples/zmqproxy']
+               'examples/zmqproxy',
+			   'examples/csp_sfp_server_client']
     builddir = 'build'
 
     meson_setup = ['meson', 'setup', builddir]
@@ -23,17 +25,13 @@ def build_with_meson():
 
 
 def build_with_cmake():
-    targets = ['examples/csp_server_client',
-               'examples/csp_server',
-               'examples/csp_client',
-               'examples/csp_arch',
-               'examples/zmqproxy']
+    build_samples = '-DCSP_BUILD_SAMPLES=ON'
     builddir = 'build'
 
-    cmake_setup = ['cmake', '-GNinja', '-B' + builddir]
+    cmake_setup = ['cmake', '-GNinja', '-B' + builddir, build_samples]
     cmake_compile = ['ninja', '-C', builddir]
     subprocess.check_call(cmake_setup)
-    subprocess.check_call(cmake_compile + targets)
+    subprocess.check_call(cmake_compile)
 
 
 def build_with_waf():

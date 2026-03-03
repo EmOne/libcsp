@@ -14,6 +14,8 @@
 #include <csp/csp_crc32.h>
 #include <csp/csp_id.h>
 
+#include "../csp_buffer_private.h"
+
 #define FEND     0xC0
 #define FESC     0xDB
 #define TFEND    0xDC
@@ -21,6 +23,9 @@
 #define TNC_DATA 0x00
 
 int csp_kiss_tx(csp_iface_t * iface, uint16_t via, csp_packet_t * packet, int from_me) {
+	/* Avoid compiler warnings about unused parameter */
+	(void)via;
+	(void)from_me;
 
 	csp_kiss_interface_data_t * ifdata = iface->interface_data;
 	void * driver = iface->driver_data;
@@ -28,8 +33,10 @@ int csp_kiss_tx(csp_iface_t * iface, uint16_t via, csp_packet_t * packet, int fr
 	/* Lock (before modifying packet) */
 	csp_usart_lock(driver);
 
+#if CSP_ENABLE_KISS_CRC
 	/* Add CRC32 checksum */
 	csp_crc32_append(packet);
+#endif
 
 	/* Save the outgoing id in the buffer */
 	csp_id_prepend(packet);
@@ -93,9 +100,9 @@ void csp_kiss_rx(csp_iface_t * iface, const uint8_t * buf, size_t len, void * px
 					break;
 				}
 
-				/* Try to allocate new buffer */
+				/* Always allocate new buffer */
 				if (ifdata->rx_packet == NULL) {
-					ifdata->rx_packet = pxTaskWoken ? csp_buffer_get_isr(0) : csp_buffer_get(0);  // CSP only supports one size
+					ifdata->rx_packet = pxTaskWoken ? csp_buffer_get_always_isr() : csp_buffer_get_always();
 				}
 
 				/* If no more memory, skip frame */
@@ -120,6 +127,13 @@ void csp_kiss_rx(csp_iface_t * iface, const uint8_t * buf, size_t len, void * px
 					break;
 				}
 
+				/* Should not append in this mode, but guard against possible NULL dereference */
+				if (ifdata->rx_packet == NULL) {
+					iface->rx_error++;
+					ifdata->rx_mode = KISS_MODE_NOT_STARTED;
+					break;
+				}
+
 				/* End Char */
 				if (inputbyte == FEND) {
 
@@ -128,20 +142,19 @@ void csp_kiss_rx(csp_iface_t * iface, const uint8_t * buf, size_t len, void * px
 
 						ifdata->rx_packet->frame_length = ifdata->rx_length;
 						if (csp_id_strip(ifdata->rx_packet) < 0) {
-							iface->rx_error++;
+							iface->frame++;
 							ifdata->rx_mode = KISS_MODE_NOT_STARTED;
 							break;
 						}
 
-						/* Count received frame */
-						iface->frame++;
-
+#if CSP_ENABLE_KISS_CRC
 						/* Validate CRC */
 						if (csp_crc32_verify(ifdata->rx_packet) != CSP_ERR_NONE) {
-							iface->rx_error++;
+							iface->frame++;
 							ifdata->rx_mode = KISS_MODE_NOT_STARTED;
 							break;
 						}
+#endif
 
 						/* Send back into CSP, notice calling from task so last argument must be NULL! */
 						csp_qfifo_write(ifdata->rx_packet, iface, pxTaskWoken);
@@ -166,6 +179,13 @@ void csp_kiss_rx(csp_iface_t * iface, const uint8_t * buf, size_t len, void * px
 				break;
 
 			case KISS_MODE_ESCAPED:
+
+				/* Should not append in this mode, but guard against possible NULL dereference */
+				if (ifdata->rx_packet == NULL) {
+					iface->rx_error++;
+					ifdata->rx_mode = KISS_MODE_NOT_STARTED;
+					break;
+				}
 
 				/* Escaped escape char */
 				if (inputbyte == TFESC)
@@ -208,5 +228,7 @@ int csp_kiss_add_interface(csp_iface_t * iface) {
 
 	iface->nexthop = csp_kiss_tx;
 
-	return csp_iflist_add(iface);
+	csp_iflist_add(iface);
+
+	return CSP_ERR_NONE;
 }
